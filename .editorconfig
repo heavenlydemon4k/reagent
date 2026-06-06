@@ -13,12 +13,6 @@ indent_style = tab
 indent_style = space
 indent_size = 4
 
-[*.{ts,tsx,js,jsx,json,yml,yaml}]
+[*.{ts,tsx,js,json,yml,yaml}]
 indent_style = space
 indent_size = 2
-
-[*.md]
-trim_trailing_whitespace = false
-
-[Makefile]
-indent_style = tab
