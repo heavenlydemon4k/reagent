@@ -4,6 +4,7 @@ vendor/
 .venv/
 __pycache__/
 *.pyc
+
 # Build outputs
 dist/
 build/
@@ -11,36 +12,44 @@ build/
 bin/
 *.exe
 *.dll
+
 # Environment
 .env
 .env.local
 .env.*.local
+
 # IDE
 .vscode/
 .idea/
 *.swp
 *~
+
 # OS
 .DS_Store
 Thumbs.db
 desktop.ini
+
 # Logs
 *.log
 logs/
+
 # Terraform
 *.tfstate
 *.tfstate.*
 .terraform/
 .terraform.lock.hcl
+
 # Test coverage
 coverage/
 *.out
 *.coverage
 coverage.xml
+
 # Mobile
 *.apk
 *.ipa
 *.aab
+
 # Misc
 *.tmp
 *.temp
