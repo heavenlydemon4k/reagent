@@ -1,76 +1,54 @@
 # Decision Stack
 
-> AI-powered email decision-clearing system that replaces the inbox.
-
-## What It Is
-
-Decision Stack ingests emails from Gmail and Outlook, converts each demand into a structured decision card ("they want X, need from you Y"), and presents them one at a time for the user to clear via text, voice, or chat. No inbox view. No scrolling. Just decisions.
+AI-powered email decision-clearing system. Replaces the inbox with structured decision cards — one at a time, no scrolling.
 
 ## Quick Stats
 
-| Metric | Value |
-|--------|-------|
-| Total files | 599 |
-| Lines of code | 130,000+ |
-| Services | 12 (8 core + OCR + STT + TTS + Calendar) |
-| Terraform modules | 15 |
-| Environments | 3 (dev, staging, prod) |
-| LLM models | 6 |
-| System invariants | 11 (all enforced) |
-
-## System Architecture
-
-```
-Gmail/Outlook APIs
-        |
-   [Ingestion Mesh] --(NATS)--> [Classification Core] --(NATS)--> [Intelligence Layer]
-        |                                                                  |
-   [OCR Service]                                                    [STT/TTS/Calendar]
-        |                                                                  |
-   [Sync & State] <---------------- WebSocket + REST ------------------ [Client]
-```
+- **599 files, 130,000+ lines**
+- **12 services** (8 core + OCR + STT + TTS + Calendar)
+- **3 languages:** Go, Python, TypeScript
+- **15 Terraform modules**
+- **11 architectural invariants** (all enforced)
 
 ## Documentation
 
-| Document | Path |
-|----------|------|
-| **Complete system documentation** | `DECISION_STACK_MASTER_DOC.md` (5,576 lines) |
-| **Progress tracker** | `DS_PROGRESS.md` |
-| **Integration tests** | `tests/integration/` (4 suites, 30 steps) |
-| **Architecture docs** | `*/docs/ARCHITECTURE.md` per service |
-| **Orchestrator handover** | `DECISION_STACK_MASTER_DOC.md` Section 23 |
+| Document | Location | Description |
+|----------|----------|-------------|
+| [Master State](docs/operations/MASTER_STATE.md) | `docs/operations/` | Complete system documentation (1,671 lines) |
+| [Deployment](docs/operations/DEPLOYMENT.md) | `docs/operations/` | Step-by-step deployment runbook |
+| [Feature Matrix](docs/operations/FEATURE_MATRIX.md) | `docs/operations/` | Client feature verification |
+| [Files Edited](docs/operations/FILES_EDITED.md) | `docs/operations/` | Build history and file inventory |
+| [Repo Guide](docs/operations/REPO_GUIDE.md) | `docs/operations/` | Repository and push guide |
+
+## Architecture
+
+Gmail/Outlook APIs
+|
+[Ingestion Mesh] --(NATS)--> [Classification Core] --(NATS)--> [Intelligence Layer]
+|                                                                  |
+[OCR Service]                                                    [STT/TTS/Calendar]
+|                                                                  |
+[Sync & State] <---------------- WebSocket + REST ------------------ [Client]
+
+
 
 ## Services
 
-| Service | Language | Entry Point | Port |
-|---------|----------|-------------|------|
-| Ingestion Server | Go | `ingestion/cmd/server/main.go` | 8080 |
-| Ingestion Worker | Go | `ingestion/cmd/worker/main.go` | - |
-| Backfill Worker | Go | `ingestion/cmd/backfill/main.go` | - |
-| Classification Server | Go | `classification/cmd/server/main.go` | 8081 |
-| Classification Worker | Go | `classification/cmd/worker/main.go` | - |
-| Sync & State | Go | `sync/cmd/server/main.go` | 8082 |
-| Intelligence | Python | `intelligence/intelligence/main.py` | 8000 |
-| OCR | Python | `services/ocr/app/main.py` | 8001 |
-| STT | Python | `services/stt/app/main.py` | 8002 |
-| TTS | Python | `services/tts/app/main.py` | 8003 |
-| Calendar | Python | `services/calendar/app/main.py` | 8004 |
-| Client | React Native | `client/App.tsx` | Metro 8081 |
+| Service | Language | Port | Purpose |
+|---------|----------|------|---------|
+| Ingestion | Go | 8080 | Fetch, parse, thread, dedup, encrypt, send |
+| Classification | Go | 8081 | Tri-state routing, rules, staging, extract-only |
+| Intelligence | Python | 8000 | Card generation, chat, drafting, calendar context |
+| Sync | Go | 8082 | CRDT merge, WebSocket, auth, batch/decision APIs |
+| Client | TypeScript | Metro 8081 | React Native mobile app |
+| OCR | Python | 8001 | Image/PDF text extraction |
+| STT | Python | 8002 | Speech-to-text (Deepgram) |
+| TTS | Python | 8003 | Text-to-speech (ElevenLabs) |
+| Calendar | Python | 8004 | Calendar read/write |
 
-## Getting Started
+## Quick Start
 
-### Prerequisites
-- Go 1.22+
-- Python 3.11+
-- Node.js 20+ (with npm/npx)
-- Terraform 1.7+
-- Docker + Docker Compose
-- AWS CLI (for deployment)
-
-### Local Development
-
-```bash
-# 1. Start infrastructure (PostgreSQL, Redis, Qdrant, Neo4j, NATS)
+# 1. Start infrastructure (PostgreSQL, Redis, NATS, Qdrant, Neo4j)
 cd infra/docker && make dev
 
 # 2. Run migrations
@@ -87,41 +65,6 @@ cd sync && go run ./cmd/server/main.go
 
 # 4. Start client
 cd client && npx expo start
-```
 
-### Terraform Deployment
-
-```bash
-cd infra/terraform/environments/staging
-terraform init
-terraform validate
-terraform plan
-terraform apply
-```
-
-## Project Structure
-
-```
-.
-├── ingestion/           # Email fetch, parse, thread, dedup, encrypt
-├── classification/      # Tri-state routing, rules, staging
-├── intelligence/        # Card generation, chat, drafting, consultation
-├── sync/                # Client API, WebSocket, sync, push
-├── services/
-│   ├── ocr/             # Image/PDF text extraction
-│   ├── stt/             # Speech-to-text (Deepgram)
-│   ├── tts/             # Text-to-speech (ElevenLabs)
-│   └── calendar/        # Calendar read/write
-├── client/              # React Native mobile app
-├── infra/
-│   ├── terraform/       # Infrastructure as code
-│   ├── docker/          # Local development
-│   └── .github/         # CI/CD workflows
-├── shared/              # Shared utilities (middleware, sanitizers)
-├── tests/integration/   # Integration test specifications
-└── docs/                # Project documentation
-```
-
-## License
-
-Proprietary. All rights reserved.
+License
+See LICENSE file.
