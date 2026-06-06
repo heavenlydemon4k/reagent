@@ -1,0 +1,48 @@
+# Dependencies
+**/node_modules/
+**/vendor/
+**/__pycache__/
+**/.pytest_cache/
+**/*.egg-info/
+
+# Build artifacts
+**/build/
+**/dist/
+**/.next/
+**/.expo/
+
+# Local environment
+**/.env
+**/.env.local
+**/.env.*.local
+**/terraform.tfvars
+!terraform.tfvars.example
+
+# IDE
+**/.vscode/
+**/.idea/
+**/*.swp
+**/*.swo
+
+# OS
+**/.DS_Store
+**/Thumbs.db
+
+# Terraform
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.*.backup
+**/*.tfstate.backup
+**/.terraform.lock.hcl
+
+# Testing
+**/coverage/
+**/*.cover
+
+# Mobile
+**/*.apk
+**/*.ipa
+**/*.app
+
+# Logs
+**/*.log

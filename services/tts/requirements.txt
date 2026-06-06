@@ -1,0 +1,25 @@
+# =============================================================================
+# TTS Service Dependencies
+# =============================================================================
+
+# FastAPI framework
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+
+# ElevenLabs official SDK
+ elevenlabs>=1.0.0
+
+# Pydantic & settings
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# HTTP client (for custom streaming and timeout control)
+httpx>=0.26.0
+
+# S3 (optional - if using S3 for audio storage)
+boto3>=1.34.0
+
+# WebSocket support (via uvicorn[standard] + websockets)
+websockets>=12.0
+
+# Python >= 3.11 (uses asyncio.to_thread, typing.Self, etc.)

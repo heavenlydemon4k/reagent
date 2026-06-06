@@ -1,0 +1,4 @@
+-- Decision Stack: Add Indexes Migration (002) — Ingestion
+-- All indexes from spec are already created in 001_initial_schema.up.sql.
+-- This migration is reserved for future index additions.
+-- No-op: no additional indexes to apply.

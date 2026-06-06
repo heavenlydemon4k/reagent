@@ -1,0 +1,1 @@
+# Calendar service core module

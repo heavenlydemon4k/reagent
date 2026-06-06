@@ -1,0 +1,114 @@
+# ------------------------------------------------------------------------------
+# Decision Stack - Production-Local Environment
+# For testing production-like configuration locally
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# This overrides the base docker-compose.yml with production-like settings:
+#   - Stricter resource limits
+#   - Persistent volumes with external driver
+#   - Higher replication/retention settings
+#   - Production memory and cache settings
+# ------------------------------------------------------------------------------
+
+version: "3.9"
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 - Production-like settings
+  # ---------------------------------------------------------------------------
+  postgres:
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  # ---------------------------------------------------------------------------
+  # Redis 7.x - Production-like settings
+  # ---------------------------------------------------------------------------
+  redis:
+    command: >
+      redis-server
+      --maxmemory 1G
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  # ---------------------------------------------------------------------------
+  # Qdrant - Production-like settings
+  # ---------------------------------------------------------------------------
+  qdrant:
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY}
+      QDRANT__LOG_LEVEL: WARN
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+
+  # ---------------------------------------------------------------------------
+  # Neo4j - Production-like settings
+  # ---------------------------------------------------------------------------
+  neo4j:
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH}
+      NEO4J_server_memory_heap_initial__size: ${NEO4J_HEAP_INITIAL:-2G}
+      NEO4J_server_memory_heap_max__size: ${NEO4J_HEAP_MAX:-2G}
+      NEO4J_server_memory_pagecache_size: ${NEO4J_PAGECACHE:-1G}
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+
+  # ---------------------------------------------------------------------------
+  # NATS JetStream - Production-like settings
+  # ---------------------------------------------------------------------------
+  nats:
+    command: >
+      --jetstream
+      --store_dir /data/jetstream
+      --max_memory_store ${NATS_MAX_MEMORY:-2048}Mi
+      --max_file_store ${NATS_MAX_FILE:-100}Gi
+      --http_port 8222
+      --port 4222
+      --server_name decision-stack-nats-prod-local
+      --max_connections 65536
+      --max_payload 8MB
+      --max_pending 64MB
+      --write_deadline 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "1.0"
+          memory: 1G

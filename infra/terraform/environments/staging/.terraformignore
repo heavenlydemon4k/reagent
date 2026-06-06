@@ -1,0 +1,15 @@
+# Ignore local files
+terraform.tfvars
+tfplan-staging
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+crash.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Ignore bootstrap script artifacts
+bootstrap-backend.sh.bak

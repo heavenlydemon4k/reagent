@@ -1,0 +1,53 @@
+# ============================================================
+# Staging Environment — Example Variables
+# ============================================================
+# Copy this file to terraform.tfvars and fill in real values.
+# DO NOT commit terraform.tfvars to Git — it contains secrets.
+# ============================================================
+
+# AWS region (default: us-east-1)
+aws_region = "us-east-1"
+
+# ---------------------------------------------------------------------------
+# Core Secrets — MUST be different from production
+# Generate with: openssl rand -hex 32
+# ---------------------------------------------------------------------------
+jwt_secret           = "stg-jwt-change-me-in-production-secret-64chars!!"
+origin_verify_header = "stg-origin-verify-change-me-32chars!!"
+redis_auth_token     = "stg-redis-auth-change-me-32chars!!"
+
+# Optional: seed staging DB from production snapshot
+# Leave empty to create a fresh empty database
+rds_snapshot_id = ""
+
+# ---------------------------------------------------------------------------
+# Managed Services — Get these from their respective consoles
+# ---------------------------------------------------------------------------
+qdrant_api_key  = "your-qdrant-cloud-api-key"
+neo4j_username  = "neo4j"
+neo4j_password  = "your-neo4j-aura-password"
+
+# ---------------------------------------------------------------------------
+# AI/LLM API Keys — Can be shared with dev (cost is negligible)
+# ---------------------------------------------------------------------------
+anthropic_api_key  = "sk-ant-api03-your-key"
+openai_api_key     = "sk-your-openai-key"
+deepgram_api_key   = "your-deepgram-api-key"
+elevenlabs_api_key = "your-elevenlabs-api-key"
+
+# ---------------------------------------------------------------------------
+# Stripe Test Keys — MUST be test keys (sk_test_*, pk_test_*)
+# Get from: https://dashboard.stripe.com/test/apikeys
+# ---------------------------------------------------------------------------
+stripe_test_secret_key     = "sk_test_your-stripe-test-key"
+stripe_test_public_key     = "pk_test_your-stripe-test-key"
+stripe_test_webhook_secret = "whsec_your-webhook-secret"
+
+# ---------------------------------------------------------------------------
+# Optional Infrastructure Settings
+# ---------------------------------------------------------------------------
+# EC2 key pair for NATS debugging (leave empty for no SSH access)
+ec2_key_name = ""
+
+# Budget alert email addresses
+alert_email_addresses = ["devops@example.com", "oncall@example.com"]

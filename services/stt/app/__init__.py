@@ -1,0 +1,1 @@
+"""STT service application module."""

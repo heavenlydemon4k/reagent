@@ -1,0 +1,2 @@
+-- Decision Stack: Rollback Add Indexes (002) — Ingestion
+-- No indexes were added in 002; this is a no-op rollback.

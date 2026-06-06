@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "decision-stack-ocr"
+version = "1.0.0"
+description = "OCR microservice for Decision Stack - extracts text from images and PDFs with confidence scoring."
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Decision Stack Team"},
+]
+keywords = ["ocr", "fastapi", "pdf", "text-extraction", "microservice"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+    "Topic :: Text Processing",
+]
+
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+    "pytesseract>=0.3.10",
+    "Pillow>=10.2.0",
+    "pdfplumber>=0.10.0",
+    "pdf2image>=1.17.0",
+    "python-multipart>=0.0.9",
+    "structlog>=24.1.0",
+    "httpx>=0.27.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/decision-stack/ocr-service"
+Repository = "https://github.com/decision-stack/ocr-service"
+
+[tool.setuptools.packages.find]
+include = ["app*", "core*", "tests*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]

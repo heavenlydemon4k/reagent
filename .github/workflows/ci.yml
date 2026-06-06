@@ -1,0 +1,541 @@
+# ---------------------------------------------------------------------------
+# CI/CD Pipeline — Decision Stack
+# ---------------------------------------------------------------------------
+# Triggers: push to main, PR to main
+# Jobs: test -> build -> push -> deploy
+# - test: Go + Python tests
+# - build: Docker images for all 8 services
+# - push: ECR push (main only)
+# - deploy: ECS rolling deployment (main only)
+# ---------------------------------------------------------------------------
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.go'
+      - '**.py'
+      - 'Dockerfile*'
+      - 'go.mod'
+      - 'go.sum'
+      - 'requirements*.txt'
+      - '.github/workflows/ci.yml'
+      - 'config/**'
+      - 'migrations/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+      - '**.py'
+      - 'Dockerfile*'
+      - 'go.mod'
+      - 'go.sum'
+      - 'requirements*.txt'
+      - '.github/workflows/ci.yml'
+      - 'config/**'
+      - 'migrations/**'
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REGISTRY: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.us-east-1.amazonaws.com
+  GO_VERSION: '1.22'
+  PYTHON_VERSION: '3.12'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Job: test — Run all unit and integration tests
+  # -------------------------------------------------------------------------
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # --- Go Setup ---
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download Go modules
+        run: go mod download
+        working-directory: .
+
+      # --- Python Setup ---
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            services/intelligence/requirements.txt
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r services/intelligence/requirements.txt
+          pip install -r services/intelligence/requirements-test.txt
+
+      # --- Go Tests ---
+      - name: Run ingestion tests
+        run: go test ./services/ingestion/... -race -coverprofile=ingestion-coverage.out -covermode=atomic -v -count=1 -timeout 10m
+        env:
+          CGO_ENABLED: 1
+
+      - name: Run classification tests
+        run: go test ./services/classification/... -race -coverprofile=classification-coverage.out -covermode=atomic -v -count=1 -timeout 10m
+        env:
+          CGO_ENABLED: 1
+
+      - name: Run sync tests
+        run: go test ./services/sync/... -race -coverprofile=sync-coverage.out -covermode=atomic -v -count=1 -timeout 10m
+        env:
+          CGO_ENABLED: 1
+
+      # --- Python Tests ---
+      - name: Run intelligence tests
+        run: |
+          cd services/intelligence
+          pytest -v --cov=. --cov-report=xml --cov-report=term -n auto --timeout=300
+        env:
+          PYTHONPATH: services/intelligence
+
+      - name: Run OCR tests
+        run: |
+          cd services/ocr
+          pip install -r requirements.txt
+          pytest -v --cov=. --cov-report=xml --cov-report=term --timeout=300
+        env:
+          PYTHONPATH: services/ocr
+
+      - name: Run STT tests
+        run: |
+          cd services/stt
+          pip install -r requirements.txt
+          pytest -v --cov=. --cov-report=xml --cov-report=term --timeout=300
+        env:
+          PYTHONPATH: services/stt
+
+      - name: Run TTS tests
+        run: |
+          cd services/tts
+          pip install -r requirements.txt
+          pytest -v --cov=. --cov-report=xml --cov-report=term --timeout=300
+        env:
+          PYTHONPATH: services/tts
+
+      - name: Run Calendar tests
+        run: |
+          cd services/calendar
+          pip install -r requirements.txt
+          pytest -v --cov=. --cov-report=xml --cov-report=term --timeout=300
+        env:
+          PYTHONPATH: services/calendar
+
+      # --- Upload Coverage ---
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: ./ingestion-coverage.out,./classification-coverage.out,./sync-coverage.out,./services/intelligence/coverage.xml,./services/ocr/coverage.xml,./services/stt/coverage.xml,./services/tts/coverage.xml,./services/calendar/coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  # -------------------------------------------------------------------------
+  # Job: build — Build Docker images for all 8 services
+  # -------------------------------------------------------------------------
+  build:
+    name: Build Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
+
+    strategy:
+      matrix:
+        service:
+          - name: ingestion
+            dockerfile: ./services/ingestion/Dockerfile
+            context: ./services/ingestion
+          - name: classification
+            dockerfile: ./services/classification/Dockerfile
+            context: ./services/classification
+          - name: intelligence
+            dockerfile: ./services/intelligence/Dockerfile
+            context: ./services/intelligence
+          - name: sync
+            dockerfile: ./services/sync/Dockerfile
+            context: ./services/sync
+          - name: ocr
+            dockerfile: ./services/ocr/Dockerfile
+            context: ./services/ocr
+          - name: stt
+            dockerfile: ./services/stt/Dockerfile
+            context: ./services/stt
+          - name: tts
+            dockerfile: ./services/tts/Dockerfile
+            context: ./services/tts
+          - name: calendar
+            dockerfile: ./services/calendar/Dockerfile
+            context: ./services/calendar
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Amazon ECR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+        with:
+          mask-password: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ECR_REGISTRY }}/decisionstack/${{ matrix.service.name }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=pr
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.dockerfile }}
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
+          platforms: linux/amd64
+          provenance: false
+
+      - name: Scan image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.ECR_REGISTRY }}/decisionstack/${{ matrix.service.name }}:sha-${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-${{ matrix.service.name }}.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
+
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-${{ matrix.service.name }}.sarif'
+
+  # -------------------------------------------------------------------------
+  # Job: push — Push images to ECR (main only)
+  # -------------------------------------------------------------------------
+  push:
+    name: Push to ECR
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    strategy:
+      max-parallel: 1
+      matrix:
+        service:
+          - name: ingestion
+            dockerfile: ./services/ingestion/Dockerfile
+            context: ./services/ingestion
+          - name: classification
+            dockerfile: ./services/classification/Dockerfile
+            context: ./services/classification
+          - name: intelligence
+            dockerfile: ./services/intelligence/Dockerfile
+            context: ./services/intelligence
+          - name: sync
+            dockerfile: ./services/sync/Dockerfile
+            context: ./services/sync
+          - name: ocr
+            dockerfile: ./services/ocr/Dockerfile
+            context: ./services/ocr
+          - name: stt
+            dockerfile: ./services/stt/Dockerfile
+            context: ./services/stt
+          - name: tts
+            dockerfile: ./services/tts/Dockerfile
+            context: ./services/tts
+          - name: calendar
+            dockerfile: ./services/calendar/Dockerfile
+            context: ./services/calendar
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        id: ecr-login
+        with:
+          mask-password: true
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.ECR_REGISTRY }}/decisionstack/${{ matrix.service.name }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.service.context }}
+          file: ${{ matrix.service.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service.name }}
+          platforms: linux/amd64
+          provenance: false
+
+      - name: Verify image in ECR
+        run: |
+          aws ecr describe-images \
+            --repository-name decisionstack/${{ matrix.service.name }} \
+            --image-ids imageTag=sha-${{ github.sha }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+
+  # -------------------------------------------------------------------------
+  # Job: deploy — Update ECS task definitions and trigger rolling deployment
+  # -------------------------------------------------------------------------
+  deploy:
+    name: Deploy to ECS
+    runs-on: ubuntu-latest
+    needs: push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    strategy:
+      max-parallel: 1
+      fail-fast: true
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # --- Render task definition templates ---
+      - name: Render ingestion task definition
+        id: render-ingestion
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/ecs-task-defs/ingestion.json.tpl
+          container-name: ingestion
+          image: ${{ env.ECR_REGISTRY }}/decisionstack/ingestion:sha-${{ github.sha }}
+
+      - name: Render classification task definition
+        id: render-classification
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/ecs-task-defs/classification.json.tpl
+          container-name: classification
+          image: ${{ env.ECR_REGISTRY }}/decisionstack/classification:sha-${{ github.sha }}
+
+      - name: Render intelligence task definition
+        id: render-intelligence
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/ecs-task-defs/intelligence.json.tpl
+          container-name: intelligence
+          image: ${{ env.ECR_REGISTRY }}/decisionstack/intelligence:sha-${{ github.sha }}
+
+      - name: Render sync task definition
+        id: render-sync
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/ecs-task-defs/sync.json.tpl
+          container-name: sync
+          image: ${{ env.ECR_REGISTRY }}/decisionstack/sync:sha-${{ github.sha }}
+
+      - name: Render OCR task definition
+        id: render-ocr
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/ecs-task-defs/ocr.json.tpl
+          container-name: ocr
+          image: ${{ env.ECR_REGISTRY }}/decisionstack/ocr:sha-${{ github.sha }}
+
+      - name: Render STT task definition
+        id: render-stt
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/ecs-task-defs/stt.json.tpl
+          container-name: stt
+          image: ${{ env.ECR_REGISTRY }}/decisionstack/stt:sha-${{ github.sha }}
+
+      - name: Render TTS task definition
+        id: render-tts
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/ecs-task-defs/tts.json.tpl
+          container-name: tts
+          image: ${{ env.ECR_REGISTRY }}/decisionstack/tts:sha-${{ github.sha }}
+
+      - name: Render Calendar task definition
+        id: render-calendar
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: infra/ecs-task-defs/calendar.json.tpl
+          container-name: calendar
+          image: ${{ env.ECR_REGISTRY }}/decisionstack/calendar:sha-${{ github.sha }}
+
+      # --- Deploy to ECS ---
+      - name: Deploy ingestion service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-ingestion.outputs.task-definition }}
+          service: ingestion
+          cluster: decisionstack-prod
+          wait-for-service-stability: true
+          codedeploy-appspec: |
+            version: 0.0
+            Resources:
+              - TargetService:
+                  Type: AWS::ECS::Service
+                  Properties:
+                    TaskDefinition: <TASK_DEFINITION>
+                    LoadBalancerInfo:
+                      ContainerName: ingestion
+                      ContainerPort: 8080
+
+      - name: Deploy classification service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-classification.outputs.task-definition }}
+          service: classification
+          cluster: decisionstack-prod
+          wait-for-service-stability: true
+
+      - name: Deploy intelligence service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-intelligence.outputs.task-definition }}
+          service: intelligence
+          cluster: decisionstack-prod
+          wait-for-service-stability: true
+
+      - name: Deploy sync service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-sync.outputs.task-definition }}
+          service: sync
+          cluster: decisionstack-prod
+          wait-for-service-stability: true
+
+      - name: Deploy OCR service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-ocr.outputs.task-definition }}
+          service: ocr
+          cluster: decisionstack-prod
+          wait-for-service-stability: true
+
+      - name: Deploy STT service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-stt.outputs.task-definition }}
+          service: stt
+          cluster: decisionstack-prod
+          wait-for-service-stability: true
+
+      - name: Deploy TTS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-tts.outputs.task-definition }}
+          service: tts
+          cluster: decisionstack-prod
+          wait-for-service-stability: true
+
+      - name: Deploy Calendar service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render-calendar.outputs.task-definition }}
+          service: calendar
+          cluster: decisionstack-prod
+          wait-for-service-stability: true
+
+      # --- Verify deployment ---
+      - name: Verify all services stable
+        run: |
+          echo "Checking service stability..."
+          for service in ingestion classification intelligence sync ocr stt tts calendar; do
+            status=$(aws ecs describe-services \
+              --cluster decisionstack-prod \
+              --services "$service" \
+              --query 'services[0].deployments[0].status' \
+              --output text)
+            if [ "$status" != "PRIMARY" ]; then
+              echo "ERROR: Service $service deployment status is $status"
+              exit 1
+            fi
+            running=$(aws ecs describe-services \
+              --cluster decisionstack-prod \
+              --services "$service" \
+              --query 'services[0].runningCount' \
+              --output text)
+            desired=$(aws ecs describe-services \
+              --cluster decisionstack-prod \
+              --services "$service" \
+              --query 'services[0].desiredCount' \
+              --output text)
+            if [ "$running" -lt "$desired" ]; then
+              echo "ERROR: Service $service has $running/$desired tasks running"
+              exit 1
+            fi
+            echo "OK: $service — $running/$desired tasks running, deployment=$status"
+          done
+          echo "All services deployed successfully"

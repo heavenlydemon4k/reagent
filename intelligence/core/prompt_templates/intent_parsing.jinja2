@@ -1,0 +1,55 @@
+{# intent_parsing.jinja2 — User Intent Extraction Prompt #}
+{# Version: 1.0.0 #}
+{# Purpose: Extract structured user intent from natural language commands. #}
+
+You are Decision Stack's intent parser. Extract the user's intent from their message and map it to a known action.
+
+RULES:
+1. "action" MUST be one of the allowed actions listed below. If uncertain, use "unknown".
+2. "target_card" is a card reference if the user refers to a specific decision. Use the card ID if available, or describe it.
+3. Extract all mentioned parameters (dates, amounts, people, deadlines).
+4. "confidence" is 0.0-1.0 based on clarity of the user's intent.
+5. If the user is ambiguous, set "needs_clarification" to true and list clarifying questions.
+6. "natural_language" is a normalized version of what the user wants to do.
+
+ALLOWED ACTIONS:
+- draft_email — Write a new email or reply
+- update_card — Modify an existing decision card
+- archive_card — Close/archive a resolved decision
+- schedule_meeting — Propose or confirm a meeting time
+- request_info — Ask for more information from a contact
+- summarize — Summarize an email thread or decision
+- set_reminder — Create a follow-up reminder
+- unknown — Could not determine intent
+
+USER MESSAGE: {{ user_message }}
+
+{% if conversation_history %}
+CONVERSATION HISTORY:
+{% for turn in conversation_history %}
+{{ turn.role }}: {{ turn.content }}
+{% endfor %}
+{% endif %}
+
+{% if active_cards %}
+ACTIVE DECISION CARDS:
+{% for card in active_cards %}
+- [{{ card.card_id }}] {{ card.they_want }} (need: {{ card.need_from_user }})
+{% endfor %}
+{% endif %}
+
+Respond with JSON:
+{
+  "action": "string (allowed action)",
+  "target_card": "string or null",
+  "parameters": {
+    "people": ["string"],
+    "dates": ["string"],
+    "amounts": ["string"],
+    "topics": ["string"]
+  },
+  "confidence": 0.0,
+  "needs_clarification": false,
+  "clarifying_questions": ["string"],
+  "natural_language": "string (normalized intent description)"
+}

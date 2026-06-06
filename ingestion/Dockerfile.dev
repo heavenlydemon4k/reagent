@@ -1,0 +1,36 @@
+# Development Dockerfile for the Ingestion Mesh
+# Uses a volume-mounted source directory for hot reload via air or direct go run.
+#
+# Usage:
+#   docker build -f Dockerfile.dev -t ingestion:dev .
+#   docker run -v $(PWD):/app -p 8080:8080 --env-file .env ingestion:dev
+
+FROM golang:1.22-alpine
+
+# Install development tools: git, air for hot reload, wget for health checks
+RUN apk add --no-cache git ca-certificates wget curl bash
+
+# Install air for hot reloading (https://github.com/cosmtrek/air)
+RUN go install github.com/cosmtrek/air@latest
+
+# Install delve for debugging
+RUN go install github.com/go-delve/delve/cmd/dlv@latest
+
+WORKDIR /app
+
+# Copy go module files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download && go mod verify
+
+# Expose server port and delve debug port
+EXPOSE 8080
+EXPOSE 2345
+
+# Default: run with air for hot reload
+# The .air.toml config file can override behavior
+CMD ["air", "-c", ".air.toml"]
+
+# Alternative: direct go run (if air is not configured)
+# CMD ["go", "run", "./cmd/server"]
