@@ -54,3 +54,11 @@ coverage.xml
 *.tmp
 *.temp
 .cache/
+decision-stack.bundle 
+decision-stack.tar.gz 
+*.bundle 
+*.tar.gz 
+decision-stack.bundle 
+decision-stack.tar.gz 
+*.bundle 
+*.tar.gz 
