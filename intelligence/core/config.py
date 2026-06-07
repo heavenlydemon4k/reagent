@@ -1,113 +1,35 @@
-"""
-Configuration settings for the Intelligence Layer.
-
-Environment variables:
-    ANTHROPIC_API_KEY       – Required for Anthropic (Claude) models
-    OPENAI_API_KEY          – Required for OpenAI (GPT) fallback models
-    REDIS_URL               – Defaults to redis://localhost:6379/0
-    DATABASE_URL            – PostgreSQL connection string
-    DEFAULT_TEMPERATURE     – Default sampling temperature (0.4)
-    DEFAULT_MAX_TOKENS      – Default max output tokens (2000)
-
-Usage:
-    from intelligence.core.config import settings
-    api_key = settings.anthropic_api_key
-"""
-
-from __future__ import annotations
+"""LLM configuration. API keys from environment."""
 
 import os
-from dataclasses import dataclass
 from typing import Optional
 
 
-@dataclass
-class Settings:
-    """
-    Intelligence Layer settings container.
-
-    Values are read from environment variables with sensible defaults
-    for local development.
-    """
-
-    # ------------------------------------------------------------------
-    # API Keys
-    # ------------------------------------------------------------------
-
-    @property
-    def anthropic_api_key(self) -> str:
-        key = os.environ.get("ANTHROPIC_API_KEY", "")
-        if not key:
-            raise ValueError(
-                "ANTHROPIC_API_KEY environment variable is not set. "
-                "Set it to your Anthropic API key."
-            )
-        return key
-
-    @property
-    def openai_api_key(self) -> str:
-        key = os.environ.get("OPENAI_API_KEY", "")
-        if not key:
-            raise ValueError(
-                "OPENAI_API_KEY environment variable is not set. "
-                "Set it to your OpenAI API key."
-            )
-        return key
-
-    # ------------------------------------------------------------------
-    # Model identifiers
-    # ------------------------------------------------------------------
-
-    primary_model: str = "claude-3-5-sonnet-20241022"
-    """Primary model — Claude 3.5 Sonnet ( Anthropic )."""
-
-    fallback_model: str = "claude-3-haiku-20240307"
-    """First fallback — cheaper Anthropic model for resilience."""
-
-    cost_fallback_model: str = "gpt-3.5-turbo"
-    """Cost fallback — cheapest model for budget-constrained requests."""
-
-    # ------------------------------------------------------------------
-    # Generation defaults
-    # ------------------------------------------------------------------
-
-    default_temperature: float = float(os.environ.get("DEFAULT_TEMPERATURE", "0.4"))
-    default_max_tokens: int = int(os.environ.get("DEFAULT_MAX_TOKENS", "2000"))
-
-    # ------------------------------------------------------------------
-    # Infrastructure
-    # ------------------------------------------------------------------
-
-    redis_url: str = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
-    database_url: str = os.environ.get(
-        "DATABASE_URL",
-        "postgresql://postgres:postgres@localhost:5432/intelligence",
-    )
-
-    # ------------------------------------------------------------------
-    # Fallback & cost controls
-    # ------------------------------------------------------------------
-
-    # Retry configuration
-    max_retries: int = 1
-    retry_backoff_base_ms: int = 500
-
-    # Cost guardrails
-    cost_exceed_multiplier: float = 2.0
-    """Trigger cost-fallback when today's cost > 2x the rolling average."""
-
-    daily_rate_limit: int = int(os.environ.get("DAILY_RATE_LIMIT", "1000"))
-    """Default per-user daily LLM call cap."""
-
-    # ------------------------------------------------------------------
-    # Prompt templates
-    # ------------------------------------------------------------------
-
-    prompt_template_dir: str = os.environ.get(
-        "PROMPT_TEMPLATE_DIR",
-        os.path.join(os.path.dirname(__file__), "prompt_templates"),
-    )
-
-
-# Singleton export
-settings = Settings()
+class LLMConfig:
+    """API keys and model settings. Loaded from env vars."""
+    
+    openai_api_key: Optional[str] = os.getenv("OPENAI_API_KEY")
+    anthropic_api_key: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
+    
+    simple_model: str = os.getenv("DS_SIMPLE_MODEL", "gpt-4o-mini")
+    complex_model: str = os.getenv("DS_COMPLEX_MODEL", "gpt-4o")
+    fallback_model: str = os.getenv("DS_FALLBACK_MODEL", "gpt-4o-mini")
+    
+    openai_base_url: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    anthropic_base_url: str = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com/v1")
+    
+    max_tokens: int = int(os.getenv("DS_MAX_TOKENS", "4096"))
+    timeout_seconds: float = float(os.getenv("DS_LLM_TIMEOUT", "30.0"))
+    
+    @classmethod
+    def validate(cls) -> list[str]:
+        """Return missing keys. At least one provider required."""
+        missing = []
+        if not cls.openai_api_key and not cls.anthropic_api_key:
+            missing.append("OPENAI_API_KEY or ANTHROPIC_API_KEY")
+        return missing
+    
+    def has_openai(self) -> bool:
+        return self.openai_api_key is not None
+    
+    def has_anthropic(self) -> bool:
+        return self.anthropic_api_key is not None

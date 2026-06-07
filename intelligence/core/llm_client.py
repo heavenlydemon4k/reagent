@@ -1,189 +1,186 @@
-"""
-LLM Client Abstract Interface
+"""Unified LLM client. Direct HTTP calls to OpenAI and Anthropic."""
 
-Defines the contract for all LLM client implementations and the shared
-GenerationResult dataclass used across the Intelligence Layer.
-
-Usage:
-    from intelligence.core.llm_client import LLMClient, GenerationResult
-"""
-
-from __future__ import annotations
-
-import abc
+import json
+import os
 import time
-from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Optional
+
+import httpx
+
+from .config import LLMConfig
+from .metering import MeterResult, TokenMeter
 
 
-@dataclass
+@dataclass(frozen=True)
 class GenerationResult:
-    """
-    Standardized result from any LLM generation call.
-
-    This dataclass is the universal return type for all LLM clients,
-    ensuring the rest of the Intelligence Layer can operate on a
-    uniform interface regardless of the underlying provider.
-
-    Attributes:
-        text: The generated text content.
-        model: The model identifier string (e.g. "claude-3-5-sonnet-20241022").
-        tokens_input: Number of input tokens consumed.
-        tokens_output: Number of output tokens generated.
-        cost_usd: Estimated cost in US dollars.
-        latency_ms: Wall-clock latency of the API call in milliseconds.
-        finish_reason: Provider-specific finish reason (e.g. "stop", "max_tokens").
-        metadata: Provider-specific metadata (e.g. Anthropic message ID, OpenAI headers).
-        warning_flags: Flags for cost degradation or other non-fatal issues.
-        is_error: Whether this result represents a failed generation.
-        error_message: Human-readable error description when is_error=True.
-    """
-
-    text: str = ""
-    model: str = ""
-    tokens_input: int = 0
-    tokens_output: int = 0
-    cost_usd: float = 0.0
-    latency_ms: float = 0.0
-    finish_reason: str = ""
-    metadata: Dict[str, Any] = field(default_factory=dict)
-    warning_flags: List[str] = field(default_factory=list)
-    is_error: bool = False
-    error_message: str = ""
-
-    @property
-    def total_tokens(self) -> int:
-        """Return total token count (input + output)."""
-        return self.tokens_input + self.tokens_output
-
-    @property
-    def is_success(self) -> bool:
-        """Return True if the generation completed without error."""
-        return not self.is_error
-
-    def to_dict(self) -> Dict[str, Any]:
-        """Serialize to dict for JSON logging / storage."""
-        return {
-            "text": self.text,
-            "model": self.model,
-            "tokens_input": self.tokens_input,
-            "tokens_output": self.tokens_output,
-            "total_tokens": self.total_tokens,
-            "cost_usd": round(self.cost_usd, 6),
-            "latency_ms": round(self.latency_ms, 2),
-            "finish_reason": self.finish_reason,
-            "metadata": self.metadata,
-            "warning_flags": self.warning_flags,
-            "is_error": self.is_error,
-            "error_message": self.error_message,
-        }
-
-    @classmethod
-    def error(cls, model: str, error_message: str, metadata: Optional[Dict[str, Any]] = None) -> "GenerationResult":
-        """Factory for creating an error result."""
-        return cls(
-            model=model,
-            error_message=error_message,
-            metadata=metadata or {},
-            is_error=True,
-        )
+    text: str
+    model: str
+    meter: MeterResult
+    raw_response: dict
 
 
-# ---------------------------------------------------------------------------
-# Cost tables (USD per 1K tokens) — updated periodically.
-# ---------------------------------------------------------------------------
-
-COST_TABLE: Dict[str, Dict[str, float]] = {
-    # Anthropic models — pricing per 1K tokens (input / output)
-    "claude-3-5-sonnet-20241022": {"input": 0.003, "output": 0.015},
-    "claude-3-5-sonnet-latest": {"input": 0.003, "output": 0.015},
-    "claude-3-sonnet-20240229": {"input": 0.003, "output": 0.015},
-    "claude-3-haiku-20240307": {"input": 0.00025, "output": 0.00125},
-    "claude-3-haiku-latest": {"input": 0.00025, "output": 0.00125},
-    "claude-3-opus-20240229": {"input": 0.015, "output": 0.075},
-    # OpenAI models
-    "gpt-4o": {"input": 0.0025, "output": 0.010},
-    "gpt-4o-latest": {"input": 0.0025, "output": 0.010},
-    "gpt-4o-mini": {"input": 0.00015, "output": 0.00060},
-    "gpt-3.5-turbo": {"input": 0.0005, "output": 0.0015},
-    "gpt-3.5-turbo-0125": {"input": 0.0005, "output": 0.0015},
-    "gpt-4-turbo": {"input": 0.010, "output": 0.030},
-}
-
-
-def compute_cost(model: str, tokens_input: int, tokens_output: int) -> float:
-    """
-    Compute the estimated cost of an LLM call in USD.
-
-    Args:
-        model: The model identifier string.
-        tokens_input: Number of input tokens.
-        tokens_output: Number of output tokens.
-
-    Returns:
-        Cost in US dollars (0.0 if model pricing is unknown).
-    """
-    pricing = COST_TABLE.get(model)
-    if pricing is None:
-        return 0.0
-    input_cost = (tokens_input / 1000.0) * pricing["input"]
-    output_cost = (tokens_output / 1000.0) * pricing["output"]
-    return round(input_cost + output_cost, 6)
-
-
-# ---------------------------------------------------------------------------
-# Abstract base class
-# ---------------------------------------------------------------------------
-
-class LLMClient(abc.ABC):
-    """
-    Abstract interface for all LLM provider clients.
-
-    Implementations **must** override ``generate`` and ``generate_stream``.
-    The fallback chain, metering, and all downstream consumers depend only
-    on this interface — never on provider-specific details.
-    """
-
-    @property
-    @abc.abstractmethod
-    def model_name(self) -> str:
-        """Return the canonical model name (used for metering & cost lookup)."""
-        ...
-
-    @abc.abstractmethod
-    async def generate(
+class LLMClient:
+    """Make real API calls. No stubs. Retries on 429. Mock mode for testing."""
+    
+    def __init__(self, config: Optional[LLMConfig] = None, mock_mode: bool = False) -> None:
+        self.cfg = config or LLMConfig()
+        self.meter = TokenMeter()
+        self._client = httpx.Client(timeout=self.cfg.timeout_seconds)
+        self._mock_mode = mock_mode
+    
+    def generate(
         self,
         prompt: str,
+        model: Optional[str] = None,
         system: Optional[str] = None,
-        temperature: float = 0.4,
-        max_tokens: int = 2000,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+        retries: int = 3,
     ) -> GenerationResult:
-        """
-        Generate a completion for *prompt*.
-
-        Args:
-            prompt: The user message / prompt text.
-            system: Optional system prompt.
-            temperature: Sampling temperature (0.0 – 1.0).
-            max_tokens: Maximum tokens to generate.
-
-        Returns:
-            GenerationResult with token counts, cost, and latency populated.
-        """
-        ...
-
-    @abc.abstractmethod
-    async def generate_stream(
+        """Generate text. Auto-detects provider from model name. Retries on 429."""
+        if self._mock_mode:
+            return self._mock_generate(prompt, model or self.cfg.complex_model)
+        
+        target_model = model or self.cfg.complex_model
+        
+        last_error = None
+        for attempt in range(retries):
+            try:
+                if target_model.startswith("claude"):
+                    return self._call_anthropic(target_model, prompt, system, temperature, max_tokens)
+                else:
+                    return self._call_openai(target_model, prompt, system, temperature, max_tokens)
+            except httpx.HTTPStatusError as e:
+                last_error = e
+                if e.response.status_code == 429:
+                    wait = 2 ** attempt
+                    print(f"Rate limited. Waiting {wait}s... (attempt {attempt + 1}/{retries})")
+                    time.sleep(wait)
+                    continue
+                raise
+        raise last_error
+    
+    def _mock_generate(self, prompt: str, model: str) -> GenerationResult:
+        """Return fake response for testing. No API call."""
+        fake_text = f"[MOCK] Response for: {prompt[:50]}..."
+        fake_tokens = len(prompt.split()) + 20  # Rough estimate
+        
+        meter = self.meter.record(
+            model=model,
+            prompt_tokens=len(prompt.split()),
+            completion_tokens=20,
+        )
+        
+        return GenerationResult(
+            text=fake_text,
+            model=model,
+            meter=meter,
+            raw_response={"mock": True, "prompt": prompt[:100]},
+        )
+    
+    def _call_openai(
         self,
+        model: str,
         prompt: str,
-        system: Optional[str] = None,
-        temperature: float = 0.4,
-        max_tokens: int = 2000,
-    ) -> AsyncIterator[str]:
-        """
-        Stream the completion text chunk-by-chunk.
-
-        Yields:
-            Text fragments as they arrive from the provider.
-        """
-        ...
+        system: Optional[str],
+        temperature: float,
+        max_tokens: Optional[int],
+    ) -> GenerationResult:
+        if not self.cfg.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY not set")
+        
+        headers = {
+            "Authorization": f"Bearer {self.cfg.openai_api_key}",
+            "Content-Type": "application/json",
+        }
+        
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        
+        body = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": max_tokens or self.cfg.max_tokens,
+        }
+        
+        url = f"{self.cfg.openai_base_url}/chat/completions"
+        resp = self._client.post(url, headers=headers, json=body)
+        resp.raise_for_status()
+        
+        data = resp.json()
+        choice = data["choices"][0]
+        text = choice["message"]["content"]
+        
+        usage = data.get("usage", {})
+        meter = self.meter.record(
+            model=model,
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+        )
+        
+        return GenerationResult(
+            text=text,
+            model=model,
+            meter=meter,
+            raw_response=data,
+        )
+    
+    def _call_anthropic(
+        self,
+        model: str,
+        prompt: str,
+        system: Optional[str],
+        temperature: float,
+        max_tokens: Optional[int],
+    ) -> GenerationResult:
+        if not self.cfg.anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY not set")
+        
+        headers = {
+            "x-api-key": self.cfg.anthropic_api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+        
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": temperature,
+            "max_tokens": max_tokens or self.cfg.max_tokens,
+        }
+        if system:
+            body["system"] = system
+        
+        url = f"{self.cfg.anthropic_base_url}/messages"
+        resp = self._client.post(url, headers=headers, json=body)
+        resp.raise_for_status()
+        
+        data = resp.json()
+        text = data["content"][0]["text"]
+        
+        usage = data.get("usage", {})
+        meter = self.meter.record(
+            model=model,
+            prompt_tokens=usage.get("input_tokens", 0),
+            completion_tokens=usage.get("output_tokens", 0),
+        )
+        
+        return GenerationResult(
+            text=text,
+            model=model,
+            meter=meter,
+            raw_response=data,
+        )
+    
+    def close(self) -> None:
+        self._client.close()
+    
+    def __enter__(self) -> "LLMClient":
+        return self
+    
+    def __exit__(self, *args: Any) -> None:
+        self.close()
