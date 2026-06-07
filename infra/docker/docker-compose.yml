@@ -1,31 +1,23 @@
 # ------------------------------------------------------------------------------
-# Decision Stack - Local Development Environment
-# All data services running locally with Docker Compose
-#
-# Usage:
-#   make dev          # Start all services
-#   make dev-down     # Stop all services
-#   make dev-logs     # Tail logs
-#   make dev-clean    # Stop and remove volumes
-#   make health       # Check all health endpoints
+# Reagent — Local Development Environment
 # ------------------------------------------------------------------------------
 
 version: "3.9"
 
 services:
   # ---------------------------------------------------------------------------
-  # PostgreSQL 16 - Primary relational database
+  # PostgreSQL 16
   # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
-    container_name: decision-stack-postgres
+    container_name: reagent-postgres
     restart: unless-stopped
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-decision_stack}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev_password_change_me}
-      POSTGRES_DB: ${POSTGRES_DB:-decision_stack}
+      POSTGRES_USER: ${POSTGRES_USER:-reagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reagent}
+      POSTGRES_DB: ${POSTGRES_DB:-reagent}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -33,21 +25,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15s
     networks:
-      - decision-stack
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - reagent
 
   # ---------------------------------------------------------------------------
-  # Redis 7.x - Caching and session store
+  # Redis 7
   # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
-    container_name: decision-stack-redis
+    container_name: reagent-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -56,7 +42,6 @@ services:
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
       --appendonly yes
-      --appendfsync everysec
     volumes:
       - redis_data:/data
     healthcheck:
@@ -64,113 +49,83 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
     networks:
-      - decision-stack
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - reagent
 
   # ---------------------------------------------------------------------------
-  # Qdrant 1.8+ - Vector database for embeddings
+  # Qdrant 1.8
   # ---------------------------------------------------------------------------
   qdrant:
     image: qdrant/qdrant:v1.8.1
-    container_name: decision-stack-qdrant
+    container_name: reagent-qdrant
     restart: unless-stopped
     ports:
-      - "6333:6333"  # HTTP API
-      - "6334:6334"  # gRPC API
+      - "6333:6333"
+      - "6334:6334"
     environment:
       QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-qdrant_dev_key_change_me}
-      QDRANT__LOG_LEVEL: INFO
     volumes:
       - qdrant_data:/qdrant/storage
       - qdrant_snapshots:/qdrant/snapshots
-      - ./qdrant-config:/qdrant/config
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:6333/healthz"]
       interval: 15s
       timeout: 5s
       retries: 5
-      start_period: 20s
     networks:
-      - decision-stack
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - reagent
 
   # ---------------------------------------------------------------------------
-  # Neo4j 5.x Community - Graph database for relationships
+  # Neo4j 5.x Community
   # ---------------------------------------------------------------------------
   neo4j:
     image: neo4j:5.16-community
-    container_name: decision-stack-neo4j
+    container_name: reagent-neo4j
     restart: unless-stopped
     ports:
-      - "7474:7474"  # HTTP Browser
-      - "7687:7687"  # Bolt protocol
+      - "7474:7474"
+      - "7687:7687"
     environment:
-      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/dev_password_change_me}
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/reagent}
       NEO4J_dbms_security_procedures_unrestricted: "apoc.*,gds.*"
       NEO4J_dbms_security_procedures_allowlist: "apoc.*,gds.*"
-      NEO4J_server_memory_heap_initial__size: ${NEO4J_HEAP_INITIAL:-512m}
-      NEO4J_server_memory_heap_max__size: ${NEO4J_HEAP_MAX:-512m}
-      NEO4J_server_memory_pagecache_size: ${NEO4J_PAGECACHE:-256m}
-      NEO4J_server_default__listen__address: "0.0.0.0"
-      NEO4J_server_bolt_listen__address: "0.0.0.0:7687"
-      NEO4J_server_http_listen__address: "0.0.0.0:7474"
-      NEO4J_dbms_logs_debug_level: INFO
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
       NEO4J_apoc_export_file_enabled: "true"
       NEO4J_apoc_import_file_enabled: "true"
-      NEO4J_apoc_import_file_use__neo4j__config: "true"
-      NEO4J_PLUGINS: '["apoc"]'  # Community edition plugins
+      NEO4J_PLUGINS: '["apoc"]'
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
       - neo4j_import:/var/lib/neo4j/import
       - neo4j_plugins:/plugins
     healthcheck:
-      test: >
-        wget --no-verbose --tries=1 --spider
-        http://localhost:7474/dbms/health || exit 1
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474/dbms/health || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
-      start_period: 45s
     networks:
-      - decision-stack
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - reagent
 
   # ---------------------------------------------------------------------------
-  # NATS Server with JetStream - Messaging backbone
+  # NATS Server with JetStream
   # ---------------------------------------------------------------------------
   nats:
     image: nats:2.10-alpine
-    container_name: decision-stack-nats
+    container_name: reagent-nats
     restart: unless-stopped
     ports:
-      - "4222:4222"  # Client port
-      - "8222:8222"  # HTTP monitoring
-      - "6222:6222"  # Cluster/routing
+      - "4222:4222"
+      - "8222:8222"
+      - "6222:6222"
     command: >
       --jetstream
       --store_dir /data/jetstream
-      --max_memory_store ${NATS_MAX_MEMORY:-512}Mi
-      --max_file_store ${NATS_MAX_FILE:-10}Gi
+      --max_memory_store 512Mi
+      --max_file_store 10Gi
       --http_port 8222
       --port 4222
-      --server_name decision-stack-nats-local
-    environment:
-      NATS_SERVER_NAME: decision-stack-nats-local
     volumes:
       - nats_jetstream:/data/jetstream
     healthcheck:
@@ -178,166 +133,120 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
     networks:
-      - decision-stack
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+      - reagent
 
   # ---------------------------------------------------------------------------
-  # NATS JetStream Setup (one-off container to configure streams)
+  # NATS JetStream Setup
   # ---------------------------------------------------------------------------
   nats-setup:
     image: natsio/nats-cli:0.1.4
-    container_name: decision-stack-nats-setup
+    container_name: reagent-nats-setup
     depends_on:
       nats:
         condition: service_healthy
-    environment:
-      NATS_URL: "nats://nats:4222"
-    volumes:
-      - ./scripts:/scripts
     entrypoint: >
       /bin/sh -c '
-      echo "Waiting for NATS to be fully ready..." &&
       sleep 5 &&
-      nats --server nats://nats:4222 stream add EMAIL_INGESTED
-      --subjects "email.ingested"
-      --storage file
-      --retention work
-      --max-msgs=-1
-      --max-bytes=-1
-      --max-age=-1
-      --replicas 1
-      --yes 2>/dev/null || echo "EMAIL_INGESTED may already exist" &&
-      nats --server nats://nats:4222 stream add EMAIL_INGESTED_DLQ
-      --subjects "email.ingested.dlq"
-      --storage file
-      --retention limits
-      --max-msgs 100000
-      --max-age 30d
-      --replicas 1
-      --yes 2>/dev/null || echo "EMAIL_INGESTED_DLQ may already exist" &&
-      nats --server nats://nats:4222 stream add INTELLIGENCE_COMPRESS
-      --subjects "intelligence.compress"
-      --storage file
-      --retention work
-      --max-msgs=-1
-      --max-bytes=-1
-      --replicas 1
-      --yes 2>/dev/null || echo "INTELLIGENCE_COMPRESS may already exist" &&
-      nats --server nats://nats:4222 stream add EXTRACT_COMPLETED
-      --subjects "ExtractCompleted"
-      --storage file
-      --retention limits
-      --max-msgs 1000000
-      --max-age 7d
-      --replicas 1
-      --yes 2>/dev/null || echo "EXTRACT_COMPLETED may already exist" &&
-      nats --server nats://nats:4222 stream add AUTO_HANDLED
-      --subjects "AutoHandled"
-      --storage file
-      --retention limits
-      --max-msgs 1000000
-      --max-age 7d
-      --replicas 1
-      --yes 2>/dev/null || echo "AUTO_HANDLED may already exist" &&
-      nats --server nats://nats:4222 stream add SYNC_NOTIFY_CARD_CREATED
-      --subjects "sync.notify.CardCreated"
-      --storage file
-      --retention limits
-      --max-msgs 1000000
-      --max-age 7d
-      --replicas 1
-      --yes 2>/dev/null || echo "SYNC_NOTIFY_CARD_CREATED may already exist" &&
-      echo "=== All JetStream streams configured ==="
+      nats --server nats://nats:4222 stream add EMAIL_INGESTED --subjects "email.ingested" --storage file --retention work --max-msgs=-1 --max-bytes=-1 --max-age=-1 --replicas 1 --yes 2>/dev/null || true &&
+      nats --server nats://nats:4222 stream add EMAIL_CLASSIFIED --subjects "email.classified" --storage file --retention work --max-msgs=-1 --max-bytes=-1 --max-age=-1 --replicas 1 --yes 2>/dev/null || true &&
+      nats --server nats://nats:4222 stream add INTELLIGENCE_COMPRESS --subjects "intelligence.compress" --storage file --retention work --max-msgs=-1 --max-bytes=-1 --replicas 1 --yes 2>/dev/null || true &&
+      echo "=== Streams configured ==="
       '
     networks:
-      - decision-stack
+      - reagent
     restart: "no"
 
-# ---------------------------------------------------------------------------
-  # Qdrant Collection Setup (one-off container to create collections)
+  # ---------------------------------------------------------------------------
+  # Qdrant Setup
   # ---------------------------------------------------------------------------
   qdrant-setup:
     image: curlimages/curl:latest
-    container_name: decision-stack-qdrant-setup
+    container_name: reagent-qdrant-setup
     depends_on:
       qdrant:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c '
-      echo "Waiting for Qdrant to be ready..." &&
       sleep 5 &&
-      curl -sfS -X PUT http://qdrant:6333/collections/email_chunks
-      -H "Content-Type: application/json"
-      -d "{\"vectors\":{\"size\":1024,\"distance\":\"Cosine\",\"on_disk\":true},\"on_disk_payload\":true}" 2>/dev/null || echo "email_chunks may already exist" &&
-      curl -sfS -X PUT http://qdrant:6333/collections/voice_examples
-      -H "Content-Type: application/json"
-      -d "{\"vectors\":{\"size\":1024,\"distance\":\"Cosine\",\"on_disk\":true},\"on_disk_payload\":true}" 2>/dev/null || echo "voice_examples may already exist" &&
-      curl -sfS -X PUT http://qdrant:6333/collections/consultation_index
-      -H "Content-Type: application/json"
-      -d "{\"vectors\":{\"size\":1024,\"distance\":\"Cosine\",\"on_disk\":true},\"on_disk_payload\":true}" 2>/dev/null || echo "consultation_index may already exist" &&
-      echo "=== All Qdrant collections created ==="
+      curl -sfS -X PUT http://qdrant:6333/collections/emails -H "Content-Type: application/json" -d "{\"vectors\":{\"size\":1536,\"distance\":\"Cosine\",\"on_disk\":true},\"on_disk_payload\":true}" 2>/dev/null || true &&
+      echo "=== Qdrant collections created ==="
       '
     networks:
-      - decision-stack
+      - reagent
     restart: "no"
 
-# ---------------------------------------------------------------------------
-  # Neo4j Constraints Setup (one-off container to create constraints)
   # ---------------------------------------------------------------------------
-  neo4j-setup:
-    image: curlimages/curl:latest
-    container_name: decision-stack-neo4j-setup
+  # Intelligence Service (Python)
+  # ---------------------------------------------------------------------------
+  intelligence:
+    build:
+      context: ../../intelligence
+      dockerfile: Dockerfile
+    container_name: reagent-intelligence
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://reagent:reagent@postgres:5432/reagent}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
+      NEO4J_USER: ${NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-reagent}
+      NATS_URL: ${NATS_URL:-nats://nats:4222}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production}
+      INGESTION_URL: ${INGESTION_URL:-http://ingestion:8080}
     depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
       neo4j:
         condition: service_healthy
-    entrypoint: >
-      /bin/sh -c '
-      echo "Waiting for Neo4j to be ready..." &&
-      sleep 10 &&
-      curl -sfS -X POST
-      -H "Content-Type: application/json"
-      -u neo4j:${NEO4J_AUTH_PASSWORD:-dev_password_change_me}
-      http://neo4j:7474/db/neo4j/tx/commit
-      -d "{\"statements\":[{\"statement\":\"CREATE CONSTRAINT contact_canonical_email IF NOT EXISTS FOR (c:Contact) REQUIRE c.canonical_email IS UNIQUE\"},{\"statement\":\"CREATE CONSTRAINT contact_id_unique IF NOT EXISTS FOR (c:Contact) REQUIRE c.id IS UNIQUE\"}]}" 2>/dev/null || echo "Constraints may already exist" &&
-      echo "=== Neo4j constraints configured ==="
-      '
+      nats:
+        condition: service_healthy
     networks:
-      - decision-stack
-    restart: "no"
+      - reagent
 
-# ------------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # Client (React/Vite)
+  # ---------------------------------------------------------------------------
+  client:
+    build:
+      context: ../../client
+      dockerfile: Dockerfile
+    container_name: reagent-client
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8000/chat/ws}
+    depends_on:
+      - intelligence
+    networks:
+      - reagent
+
+# ---------------------------------------------------------------------------
 # Networks
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
 networks:
-  decision-stack:
-    name: decision-stack
+  reagent:
+    name: reagent
     driver: bridge
 
-# ------------------------------------------------------------------------------
-# Volumes (persistent across restarts)
-# ------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Volumes
+# ---------------------------------------------------------------------------
 volumes:
   postgres_data:
-    name: decision-stack-postgres-data
   redis_data:
-    name: decision-stack-redis-data
   qdrant_data:
-    name: decision-stack-qdrant-data
   qdrant_snapshots:
-    name: decision-stack-qdrant-snapshots
   neo4j_data:
-    name: decision-stack-neo4j-data
   neo4j_logs:
-    name: decision-stack-neo4j-logs
   neo4j_import:
-    name: decision-stack-neo4j-import
   neo4j_plugins:
-    name: decision-stack-neo4j-plugins
   nats_jetstream:
-    name: decision-stack-nats-jetstream

@@ -49,12 +49,31 @@ class AgentOrchestrator:
         else:
             return await self._handle_general_chat(user_id, session_id, content, session_manager)
 
+    async def handle_card_action(
+        self,
+        user_id: str,
+        session_id: str,
+        card_id: str,
+        action_id: str,
+        payload: Optional[dict],
+        session_manager: SessionManager,
+    ) -> Dict[str, Any]:
+        """Handle card actions: send, edit, discard from preview cards."""
+        if action_id == "send":
+            return await self._handle_send_approval(user_id, session_id, card_id, session_manager)
+        elif action_id == "edit":
+            return await self._handle_edit_request(user_id, session_id, card_id, payload, session_manager)
+        elif action_id == "discard":
+            return await self._handle_discard(user_id, session_id, card_id, session_manager)
+        else:
+            return self._agent_response(session_id, f"Action '{action_id}' not recognized.", session_manager)
+
     def _classify_intent(self, content: str) -> str:
         text = content.lower().strip()
         decision_actions = ["reply", "approve", "reject", "archive", "forward", "delegate", "snooze", "request info"]
         if any(text.startswith(a) for a in decision_actions):
             return "decision_action"
-        stack_commands = ["start stack", "begin stack", "work through emails", "let\'s go", "pause", "resume", "next card", "skip"]
+        stack_commands = ["start stack", "begin stack", "work through emails", "let's go", "pause", "resume", "next card", "skip"]
         if any(cmd in text for cmd in stack_commands):
             return "stack_control"
         draft_signals = ["draft", "write", "compose", "prepare a", "create a reply"]
@@ -71,7 +90,7 @@ class AgentOrchestrator:
     async def _handle_kb_query(self, user_id, session_id, content, session_manager):
         search_results = self.kb.semantic_search(user_id, content, limit=5)
         if not search_results:
-            return self._agent_response(session_id, "I couldn\'t find any emails matching that query.", session_manager)
+            return self._agent_response(session_id, "I couldn't find any emails matching that query.", session_manager)
 
         context = self.kb.summarize_for_agent(search_results)
         profile = self.profile.get_or_create(user_id) if self.profile else None
@@ -99,7 +118,7 @@ Format: Your answer here [Source: email_id]."""
         )
 
     async def _handle_decision_action(self, user_id, session_id, content, session_manager):
-        active_card = self.stack.get_active(session_id)
+        active_card = await self.stack.get_active(session_id)
         if not active_card:
             return self._agent_response(
                 session_id, "No active decision card. Start a stack session first.", session_manager
@@ -108,10 +127,10 @@ Format: Your answer here [Source: email_id]."""
         action = self._parse_action(content)
 
         if action in ["archive", "snooze"]:
-            self.stack.resolve_card(active_card.id, action)
+            await self.stack.resolve_card(active_card.id, action)
             return self._agent_response(
                 session_id,
-                f"Done. I\'ve {action}ed the email from {active_card.source_email[\'from\']}.",
+                f"Done. I've {action}ed the email from {active_card.source_email['from']}.",
                 session_manager,
                 card_resolved={"card_id": active_card.id, "action": action},
             )
@@ -143,7 +162,7 @@ Format: Your answer here [Source: email_id]."""
 
         return self._agent_response(
             session_id,
-            "Here\'s the draft. Review before sending.",
+            "Here's the draft. Review before sending.",
             session_manager,
             card_payload=preview_payload,
             cost=draft["cost_usd"],
@@ -152,30 +171,31 @@ Format: Your answer here [Source: email_id]."""
     async def _handle_stack_control(self, user_id, session_id, content, session_manager):
         text = content.lower()
 
-        if any(cmd in text for cmd in ["start", "begin", "let\'s go", "work through"]):
-            card = self.stack.activate_next(user_id, session_id)
+        if any(cmd in text for cmd in ["start", "begin", "let's go", "work through"]):
+            card = await self.stack.activate_next(user_id, session_id)
             if not card:
                 return self._agent_response(
                     session_id, "Your decision stack is empty. No critical emails right now.", session_manager
                 )
             payload = self.stack.to_message_payload(card)
+            stack_len = await self.stack.stack_length(user_id)
             return self._agent_response(
                 session_id,
-                f"Starting stack. Card 1 of {len(self.stack.get_stack(user_id))}:",
+                f"Starting stack. Card 1 of {stack_len}:",
                 session_manager,
                 card_payload=payload,
             )
 
         if "pause" in text:
             return self._agent_response(
-                session_id, "Stack paused. Say \'resume\' when you\'re ready to continue.", session_manager
+                session_id, "Stack paused. Say 'resume' when you're ready to continue.", session_manager
             )
 
         if "next" in text or "skip" in text:
-            active = self.stack.get_active(session_id)
+            active = await self.stack.get_active(session_id)
             if active:
-                self.stack.resolve_card(active.id, "skipped")
-            card = self.stack.activate_next(user_id, session_id)
+                await self.stack.resolve_card(active.id, "skipped")
+            card = await self.stack.activate_next(user_id, session_id)
             if not card:
                 return self._agent_response(
                     session_id, "Stack complete. No more critical emails.", session_manager, stack_complete=True
@@ -195,7 +215,8 @@ Format: Your answer here [Source: email_id]."""
     async def _handle_general_chat(self, user_id, session_id, content, session_manager):
         session = session_manager.get(session_id)
         history = session.messages[-10:] if session else []
-        history_str = "\n".join([f"{m[\'role\']}: {m[\'content\']}" for m in history])
+        history_str = "
+".join([f"{m['role']}: {m['content']}" for m in history])
 
         profile = self.profile.get_or_create(user_id) if self.profile else None
         tone = profile.agent_tone if profile else "professional"
@@ -204,7 +225,7 @@ Format: Your answer here [Source: email_id]."""
 
         prompt = f"""You are {name}. Tone: {tone}. {suffix}
 
-You are an email agent assistant. You have access to the user\'s inbox but they haven\'t asked a specific question about it right now.
+You are an email agent assistant. You have access to the user's inbox but they haven't asked a specific question about it right now.
 
 Recent chat history:
 {history_str}
@@ -215,6 +236,59 @@ Agent:"""
         response = self.llm.route(prompt, complexity="auto")
         return self._agent_response(
             session_id, response.text.strip(), session_manager, cost=response.meter.total_cost_usd
+        )
+
+    async def _handle_send_approval(self, user_id, session_id, card_id, session_manager):
+        """User clicked Send on a preview card. Send via Ingestion, mark resolved, next card."""
+        from intelligence.app.decision_stack.service import DecisionStackService
+        stack = DecisionStackService(kb=self.kb)
+        result = await stack.send_and_resolve(card_id, user_id)
+        if result.get("error"):
+            return self._agent_response(session_id, f"Send failed: {result['error']}", session_manager)
+
+        # Next card
+        card = await stack.activate_next(user_id, session_id)
+        if not card:
+            return self._agent_response(
+                session_id, "Sent. Stack complete — no more critical emails.", session_manager, stack_complete=True
+            )
+        payload = stack.to_message_payload(card)
+        return self._agent_response(
+            session_id, "Sent. Next card:", session_manager, card_payload=payload
+        )
+
+    async def _handle_edit_request(self, user_id, session_id, card_id, payload, session_manager):
+        """User wants to edit a draft."""
+        edit_text = (payload or {}).get("edit_text", "")
+        if not edit_text:
+            return self._agent_response(session_id, "No edit text provided.", session_manager)
+        draft = self.drafting.edit_draft(card_id, edit_text)
+        preview_payload = {
+            "type": "card",
+            "card_type": "confirm",
+            "title": "Edited Draft",
+            "body": draft["draft_text"],
+            "options": [
+                {"id": "send", "label": "Send", "style": "primary"},
+                {"id": "edit", "label": "Edit", "style": "default"},
+                {"id": "discard", "label": "Discard", "style": "danger"},
+            ],
+            "metadata": {"card_id": card_id, "draft": draft, "preview": True},
+        }
+        return self._agent_response(session_id, "Updated draft:", session_manager, card_payload=preview_payload)
+
+    async def _handle_discard(self, user_id, session_id, card_id, session_manager):
+        """User discarded a draft. Return to decision card."""
+        from intelligence.app.decision_stack.service import DecisionStackService
+        stack = DecisionStackService(kb=self.kb)
+        card = await stack.get_card_by_id(card_id)
+        if not card:
+            return self._agent_response(session_id, "Card not found.", session_manager)
+        # Reactivate the card
+        card.status = "active"
+        payload = stack.to_message_payload(card)
+        return self._agent_response(
+            session_id, "Draft discarded. Here's the card again:", session_manager, card_payload=payload
         )
 
     def _agent_response(
