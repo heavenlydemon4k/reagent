@@ -34,7 +34,7 @@ const API_BASE_URL =
   'https://api.decisionstack.app/v1';
 
 let isRefreshing = false;
-let refreshQueue: Array<{
+let refreshQueue: Array<<{
   resolve: (token: string) => void;
   reject: (err: Error) => void;
 }> = [];
@@ -137,7 +137,7 @@ api.interceptors.response.use(
           throw new Error('No refresh token available');
         }
 
-        const response = await axios.post<{
+        const response = await axios.post<<{
           access_token: string;
           refresh_token: string;
           expires_at: number;
@@ -202,8 +202,8 @@ export async function checkServerHealth(): Promise<boolean> {
  */
 export async function fetchBatch(
   maxCards?: number
-): Promise<BatchInfo> {
-  const response = await api.get<BatchInfo>('/batch', {
+): Promise<<BatchInfo> {
+  const response = await api.get<<BatchInfo>('/batch', {
     params: maxCards ? { limit: maxCards } : undefined,
   });
   return response.data;
@@ -214,8 +214,8 @@ export async function fetchBatch(
  */
 export async function syncWithServer(
   request: SyncRequest
-): Promise<SyncResponse> {
-  const response = await api.post<SyncResponse>('/sync', request);
+): Promise<<SyncResponse> {
+  const response = await api.post<<SyncResponse>('/sync', request);
   return response.data;
 }
 
@@ -224,8 +224,8 @@ export async function syncWithServer(
  */
 export async function submitDecision(
   request: DecideRequest
-): Promise<DecideResponse> {
-  const response = await api.post<DecideResponse>(
+): Promise<<DecideResponse> {
+  const response = await api.post<<DecideResponse>(
     `/cards/${request.card_id}/decide`,
     {
       decision: request.decision,
@@ -242,9 +242,9 @@ export async function submitDecision(
 export async function fetchCardSource(
   cardId: string,
   chunkIds?: string[]
-): Promise<{
+): Promise<<{
   card_id: string;
-  chunks: Array<{
+  chunks: Array<<{
     chunk_id: string;
     content: string;
     email_id: string;
@@ -261,7 +261,7 @@ export async function fetchCardSource(
  * Send an approved draft via the chat command endpoint.
  * POST /v1/chat/drafts/{draft_id}/send
  */
-export async function sendDraft(draftId: string): Promise<{
+export async function sendDraft(draftId: string): Promise<<{
   status: string;
   sent_at?: string;
   message_id?: string;
@@ -286,8 +286,8 @@ export async function cancelDraft(draftId: string): Promise<void> {
  * Fetch calendar events for the authenticated user.
  * GET /v1/chat/calendar/events
  */
-export async function getCalendarEvents(days?: number): Promise<CalendarEvent[]> {
-  const response = await api.get<CalendarEvent[]>('/chat/calendar/events', {
+export async function getCalendarEvents(days?: number): Promise<<CalendarEvent[]> {
+  const response = await api.get<<CalendarEvent[]>('/chat/calendar/events', {
     params: days ? { days } : undefined,
   });
   return response.data;
@@ -297,8 +297,8 @@ export async function getCalendarEvents(days?: number): Promise<CalendarEvent[]>
  * Check free/busy status for a specific date.
  * GET /v1/chat/calendar/freebusy
  */
-export async function checkFreeBusy(date: string): Promise<FreeBusyResponse> {
-  const response = await api.get<FreeBusyResponse>('/chat/calendar/freebusy', {
+export async function checkFreeBusy(date: string): Promise<<FreeBusyResponse> {
+  const response = await api.get<<FreeBusyResponse>('/chat/calendar/freebusy', {
     params: { date },
   });
   return response.data;
@@ -310,8 +310,8 @@ export async function checkFreeBusy(date: string): Promise<FreeBusyResponse> {
  */
 export async function createCalendarEvent(
   event: CalendarEventCreate
-): Promise<CalendarEvent> {
-  const response = await api.post<CalendarEvent>('/chat/calendar/events', event);
+): Promise<<CalendarEvent> {
+  const response = await api.post<<CalendarEvent>('/chat/calendar/events', event);
   return response.data;
 }
 
@@ -320,8 +320,8 @@ export async function createCalendarEvent(
  */
 export async function consultOnCard(
   request: ConsultRequest
-): Promise<ConsultResponse> {
-  const response = await api.post<ConsultResponse>(
+): Promise<<ConsultResponse> {
+  const response = await api.post<<ConsultResponse>(
     `/cards/${request.card_id}/consult`,
     { question: request.question }
   );
@@ -335,16 +335,16 @@ export async function consultOnCard(
 /**
  * Fetch all conversations for the current user.
  */
-export async function fetchConversations(): Promise<ConversationListItem[]> {
-  const response = await api.get<ConversationListItem[]>('/chat/conversations');
+export async function fetchConversations(): Promise<<ConversationListItem[]> {
+  const response = await api.get<<ConversationListItem[]>('/chat/conversations');
   return response.data;
 }
 
 /**
  * Fetch a single conversation with full message history.
  */
-export async function fetchConversation(id: string): Promise<Conversation> {
-  const response = await api.get<Conversation>(`/chat/conversations/${id}`);
+export async function fetchConversation(id: string): Promise<<Conversation> {
+  const response = await api.get<<Conversation>(`/chat/conversations/${id}`);
   return response.data;
 }
 
@@ -353,8 +353,8 @@ export async function fetchConversation(id: string): Promise<Conversation> {
  */
 export async function createConversation(
   linkedCardId?: string
-): Promise<Conversation> {
-  const response = await api.post<Conversation>('/chat/conversations', {
+): Promise<<Conversation> {
+  const response = await api.post<<Conversation>('/chat/conversations', {
     linked_card_id: linkedCardId,
   });
   return response.data;
@@ -372,8 +372,8 @@ export async function deleteConversation(id: string): Promise<void> {
  */
 export async function sendChatMessage(
   request: ChatRequest
-): Promise<ChatResponse> {
-  const response = await api.post<ChatResponse>('/chat/messages', request);
+): Promise<<ChatResponse> {
+  const response = await api.post<<ChatResponse>('/chat/messages', request);
   return response.data;
 }
 
@@ -383,11 +383,11 @@ export async function sendChatMessage(
 export async function sendVoiceMessage(
   conversationId: string,
   audioBlob: Blob
-): Promise<ChatResponse> {
+): Promise<<ChatResponse> {
   const formData = new FormData();
   formData.append('audio', audioBlob, 'voice-message.webm');
 
-  const response = await api.post<ChatResponse>(
+  const response = await api.post<<ChatResponse>(
     `/chat/conversations/${conversationId}/voice`,
     formData,
     {
@@ -410,7 +410,7 @@ export async function sendVoiceMessage(
 export async function initiateOAuth(
   provider: 'google' | 'microsoft'
 ): Promise<string> {
-  const response = await api.post<{
+  const response = await api.post<<{
     auth_url: string;
     state: string;
   }>('/auth/add-account', { provider });
@@ -424,8 +424,8 @@ export async function initiateOAuth(
 export async function completeOAuthCallback(
   code: string,
   state: string
-): Promise<EmailAccount> {
-  const response = await api.post<{
+): Promise<<EmailAccount> {
+  const response = await api.post<<{
     account: EmailAccount;
   }>('/auth/add-account/callback', { code, state });
   return response.data.account;
@@ -434,8 +434,8 @@ export async function completeOAuthCallback(
 /**
  * Fetch all connected email accounts for the current user.
  */
-export async function getConnectedAccounts(): Promise<EmailAccount[]> {
-  const response = await api.get<{
+export async function getConnectedAccounts(): Promise<<EmailAccount[]> {
+  const response = await api.get<<{
     accounts: EmailAccount[];
   }>('/auth/accounts');
   return response.data.accounts;
@@ -469,11 +469,11 @@ export async function setServerActiveAccount(
  * Mark the current user as having completed onboarding.
  * Sets users.onboarded_at = NOW() on the server.
  */
-export async function completeOnboarding(): Promise<{
+export async function completeOnboarding(): Promise<<{
   success: boolean;
   onboarded_at: string;
 }> {
-  const response = await api.post<{
+  const response = await api.post<<{
     success: boolean;
     onboarded_at: string;
   }>('/users/onboarding/complete');
@@ -490,8 +490,8 @@ export async function completeOnboarding(): Promise<{
  */
 export async function getContactProfile(
   contactId: string
-): Promise<ContactProfile> {
-  const response = await api.get<ContactProfile>(
+): Promise<<ContactProfile> {
+  const response = await api.get<<ContactProfile>(
     `/contacts/${contactId}/profile`
   );
   return response.data;
@@ -504,8 +504,8 @@ export async function getContactTimeline(
   contactId: string,
   limit = 20,
   cursor?: string
-): Promise<ThreadSummary[]> {
-  const response = await api.get<ThreadSummary[]>(
+): Promise<<ThreadSummary[]> {
+  const response = await api.get<<ThreadSummary[]>(
     `/contacts/${contactId}/timeline`,
     {
       params: { limit, cursor },
@@ -526,4 +526,112 @@ export async function muteContact(contactId: string): Promise<void> {
  */
 export async function unmuteContact(contactId: string): Promise<void> {
   await api.post(`/contacts/${contactId}/unmute`);
+}
+
+// ============================================================================
+// CHAT SESSIONS (NEW)
+// ============================================================================
+
+/**
+ * Create a new chat session about a specific decision or topic.
+ */
+export async function createChatSession(
+  userId: string,
+  title?: string,
+  context?: object
+): Promise<{ id: string; title: string; created_at: number }> {
+  const response = await api.post('/chat/sessions', {
+    user_id: userId,
+    title,
+    context,
+  });
+  return response.data;
+}
+
+/**
+ * List all chat sessions for the current user.
+ */
+export async function listChatSessions(
+  userId: string
+): Promise<Array<{ id: string; title: string; created_at: number; updated_at: number; message_count: number }>> {
+  const response = await api.get(`/chat/sessions?user_id=${userId}`);
+  return response.data;
+}
+
+/**
+ * Get a specific chat session with full message history.
+ */
+export async function getChatSession(
+  sessionId: string
+): Promise<{ session_id: string; messages: Array<<unknown> }> {
+  const response = await api.get(`/chat/sessions/${sessionId}`);
+  return response.data;
+}
+
+/**
+ * Send a message in a chat session.
+ */
+export async function sendChatSessionMessage(
+  sessionId: string,
+  userId: string,
+  content: string
+): Promise<<{
+  session_id: string;
+  message: unknown;
+  cost_usd: number;
+  model: string;
+}> {
+  const response = await api.post(`/chat/sessions/${sessionId}/messages`, {
+    user_id: userId,
+    content,
+  });
+  return response.data;
+}
+
+/**
+ * Send a decision card as a chat message.
+ */
+export async function sendChatCard(
+  sessionId: string,
+  cardData: object
+): Promise<<unknown> {
+  const response = await api.post(`/chat/sessions/${sessionId}/cards`, cardData);
+  return response.data;
+}
+
+// ============================================================================
+// PROFILE (NEW)
+// ============================================================================
+
+/**
+ * Get user profile and personalization settings.
+ */
+export async function getProfile(userId: string): Promise<<unknown> {
+  const response = await api.get(`/profile/${userId}`);
+  return response.data;
+}
+
+/**
+ * Update user profile settings.
+ */
+export async function updateProfile(
+  userId: string,
+  updates: object
+): Promise<<unknown> {
+  const response = await api.put(`/profile/${userId}`, updates);
+  return response.data;
+}
+
+/**
+ * Get agent behavior preferences.
+ */
+export async function getPreferences(userId: string): Promise<<{
+  agent_tone: string;
+  agent_detail_level: string;
+  auto_handle_confidence: number;
+  voice_enabled: boolean;
+  notifications_enabled: boolean;
+}> {
+  const response = await api.get(`/profile/${userId}/preferences`);
+  return response.data;
 }
