@@ -226,11 +226,11 @@ func (c *SendConsumer) trySend(ctx context.Context, log *logger.Logger, payload 
 		"sent_at":    time.Now().UTC().Format(time.RFC3339),
 	}
 	confirmBytes, _ := json.Marshal(confirm)
-	if pubErr := c.js.Publish(SubjectEmailSent, confirmBytes); pubErr != nil {
+	_, pubErr := c.js.Publish(SubjectEmailSent, confirmBytes)
+	if pubErr != nil {
 		log.Warn(ctx, "failed to publish email.sent confirmation", "error", pubErr)
 		// Non-fatal: email was sent, just confirmation lost
 	}
-
 	return nil
 }
 

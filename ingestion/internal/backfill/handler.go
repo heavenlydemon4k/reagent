@@ -1,28 +1,25 @@
 package backfill
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/redis/go-redis/v9"
 )
 
 // StatusHandler provides the HTTP endpoint for backfill progress monitoring.
 // It is mounted into the ingestion server at GET /api/v1/backfill/status.
 type StatusHandler struct {
-	redis *redis.Client
-	log   *slog.Logger
+	scheduler *Scheduler
+	log       *slog.Logger
 }
 
 // NewStatusHandler creates a new backfill status HTTP handler.
-func NewStatusHandler(redisClient *redis.Client, log *slog.Logger) *StatusHandler {
+func NewStatusHandler(scheduler *Scheduler, log *slog.Logger) *StatusHandler {
 	return &StatusHandler{
-		redis: redisClient,
-		log:   log.With("component", "backfill_status_handler"),
+		scheduler: scheduler,
+		log:       log.With("component", "backfill_status_handler"),
 	}
 }
 
@@ -55,11 +52,8 @@ func (h *StatusHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Use scheduler to read progress from Redis
-	sched := NewScheduler(h.redis, h.log)
 	ctx := r.Context()
-
-	snap, err := sched.GetProgress(ctx, userID)
+	snap, err := h.scheduler.GetProgress(ctx, userID)
 	if err != nil {
 		h.log.Warn("no backfill progress found", "user_id", userID, "error", err)
 		// Return a friendly response indicating no active backfill

@@ -640,16 +640,6 @@ func (p *OutlookPoller) convertToParsedEmail(msg OutlookMessage, accountID, user
 		})
 	}
 
-	// Build thread hint
-	var threadHint *models.ThreadHint
-	if inReplyTo != nil || len(references) > 0 {
-		threadHint = &models.ThreadHint{
-			InReplyTo: *inReplyTo,
-			References: references,
-			Subject:    msg.Subject,
-		}
-	}
-
 	return &models.ParsedEmail{
 		ID:              uuid.Nil, // generated at insert time
 		UserID:          userID,

@@ -89,7 +89,6 @@ var StreamConfigs = map[string]nats.StreamConfig{
 		Subjects:  []string{SubjectEmailIngested},
 		Retention: nats.WorkQueuePolicy,
 		MaxMsgSize: 8 * 1024 * 1024, // 8MB
-		MaxDeliver: 5,
 		Discard:    nats.DiscardOld,
 	},
 	"EMAIL_INGESTED_DLQ": {
@@ -103,7 +102,6 @@ var StreamConfigs = map[string]nats.StreamConfig{
 		Subjects:  []string{SubjectEmailSend},
 		Retention: nats.WorkQueuePolicy,
 		MaxMsgSize: 2 * 1024 * 1024, // 2 MB — drafts are small text
-		MaxDeliver: 5,
 		Discard:    nats.DiscardOld,
 	},
 	"EMAIL_SENT": {
