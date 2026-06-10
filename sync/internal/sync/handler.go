@@ -74,8 +74,13 @@ func (h *SyncHandler) HandleSync(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	// --- Step 1: Extract user ID from context (set by JWT middleware) ---
-	userID := auth.UserIDFromContext(ctx)
-	if userID == uuid.Nil {
+	userIDStr, ok := auth.UserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		h.writeError(w, http.StatusUnauthorized, models.ErrCodeAuthExpired, "Authentication required")
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
 		h.writeError(w, http.StatusUnauthorized, models.ErrCodeAuthExpired, "Authentication required")
 		return
 	}

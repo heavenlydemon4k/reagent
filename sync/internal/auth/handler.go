@@ -399,7 +399,16 @@ func resolveUserID(r *http.Request) uuid.UUID {
 // Router wiring helper
 // ---------------------------------------------------------------------------
 
+// AuthRoutes registers auth routes on the provided Chi router.
+// This is an alias for MountAuthRoutes.
+func AuthRoutes(r chi.Router, h *Handler) {
+	MountAuthRoutes(r, h)
+}
+
 // MountAuthRoutes registers auth routes on the provided Chi router.
 func MountAuthRoutes(r chi.Router, h *Handler) {
-	AuthRoutes(r, h)
+	r.Post("/device", h.RegisterDevice)
+	r.Post("/refresh", h.RefreshToken)
+	r.Delete("/sessions/{id}", h.RevokeSession)
+	r.Get("/sessions", h.ListSessions)
 }

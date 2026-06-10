@@ -7,9 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/decisionstack/sync/internal/models"
 	"github.com/google/uuid"
-	"github.com/jmoiron/sqlx"
 	"github.com/nats-io/nats.go"
 )
 

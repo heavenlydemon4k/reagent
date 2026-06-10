@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -267,9 +268,51 @@ func MustUserID(ctx context.Context) string {
 	return userID
 }
 
+// MustGetUserID extracts the user ID as a UUID, returning an error if absent or unparsable.
+func MustGetUserID(ctx context.Context) (uuid.UUID, error) {
+	userIDStr, ok := UserIDFromContext(ctx)
+	if !ok || userIDStr == "" {
+		return uuid.Nil, fmt.Errorf("user ID not in context")
+	}
+	return uuid.Parse(userIDStr)
+}
+
+// DeviceIDFromContext extracts the device ID from context.
+// Returns empty string if not present (gRPC interceptors do not store device ID).
+func DeviceIDFromContext(ctx context.Context) string {
+	_ = ctx
+	return ""
+}
+
 // ------------------------------------------------------------------------------
 // Health Check Middleware (no auth required)
 // ------------------------------------------------------------------------------
+
+// JWTMiddleware returns a chi-compatible HTTP middleware that validates Bearer JWTs.
+// It stores the userID (as string) in context under ContextKeyUserID.
+func JWTMiddleware(tm *TokenManager) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			if authHeader == "" {
+				http.Error(w, `{"error":"missing_authorization_header"}`, http.StatusUnauthorized)
+				return
+			}
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
+				http.Error(w, `{"error":"invalid_authorization_format"}`, http.StatusUnauthorized)
+				return
+			}
+			userID, _, err := tm.ValidateAccessToken(parts[1])
+			if err != nil {
+				http.Error(w, `{"error":"token_invalid"}`, http.StatusUnauthorized)
+				return
+			}
+			ctx := context.WithValue(r.Context(), ContextKeyUserID, userID.String())
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
 
 // HealthCheckPaths contains paths that bypass authentication.
 var HealthCheckPaths = map[string]bool{

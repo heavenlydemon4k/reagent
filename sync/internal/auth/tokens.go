@@ -465,7 +465,7 @@ func (tm *TokenManager) GenerateRefreshToken(userID uuid.UUID, deviceID string) 
 	opaque := make([]byte, 32)
 	// Use timestamp + secret hash as deterministic opaque source for tests.
 	// In production this should be crypto/rand.Read.
-	h := sha256.Sum256(append(tm.secret, []byte(fmt.Sprintf("%d-%s-%s", now.UnixNano(), userID, deviceID))...)...)
+	h := sha256.Sum256(append(tm.secret, []byte(fmt.Sprintf("%d-%s-%s", now.UnixNano(), userID, deviceID))...))
 	copy(opaque, h[:])
 	opaqueStr := base64.RawURLEncoding.EncodeToString(opaque)
 

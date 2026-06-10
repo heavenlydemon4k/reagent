@@ -39,8 +39,8 @@ type Sanitizer struct {
 	emailRegex *regexp.Regexp
 }
 
-// New creates a new Sanitizer with compiled regexes.
-func New() *Sanitizer {
+// NewSanitizer creates a new Sanitizer with compiled regexes.
+func NewSanitizer() *Sanitizer {
 	return &Sanitizer{
 		emailRegex: regexp.MustCompile(`[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}`),
 	}

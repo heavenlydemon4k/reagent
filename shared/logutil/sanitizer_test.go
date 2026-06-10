@@ -37,7 +37,7 @@ func TestRedactSubject(t *testing.T) {
 	os.Setenv("ENV", "production")
 	defer os.Unsetenv("ENV")
 
-	s := New()
+	s := NewSanitizer()
 
 	t.Run("short subject unchanged", func(t *testing.T) {
 		subject := "Short subj"
@@ -82,7 +82,7 @@ func TestRedactEmail(t *testing.T) {
 	os.Setenv("ENV", "production")
 	defer os.Unsetenv("ENV")
 
-	s := New()
+	s := NewSanitizer()
 
 	t.Run("valid email redacted", func(t *testing.T) {
 		email := "john.doe@example.com"
@@ -122,7 +122,7 @@ func TestRedactBody(t *testing.T) {
 	os.Setenv("ENV", "production")
 	defer os.Unsetenv("ENV")
 
-	s := New()
+	s := NewSanitizer()
 
 	t.Run("non-empty body redacted", func(t *testing.T) {
 		body := "This is the body of an email with sensitive content."
@@ -158,7 +158,7 @@ func TestSanitizeMap(t *testing.T) {
 	os.Setenv("ENV", "production")
 	defer os.Unsetenv("ENV")
 
-	s := New()
+	s := NewSanitizer()
 
 	t.Run("body_text redacted", func(t *testing.T) {
 		fields := map[string]interface{}{
@@ -236,7 +236,7 @@ func TestRedactGeneric(t *testing.T) {
 	os.Setenv("ENV", "production")
 	defer os.Unsetenv("ENV")
 
-	s := New()
+	s := NewSanitizer()
 
 	t.Run("generic text redacted", func(t *testing.T) {
 		text := "This is a user instruction that should be redacted for privacy"

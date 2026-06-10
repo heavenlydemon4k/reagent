@@ -2,7 +2,6 @@
 package websocket
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,7 +12,6 @@ import (
 	"github.com/decisionstack/sync/internal/config"
 	"github.com/decisionstack/sync/internal/logger"
 	"github.com/decisionstack/sync/internal/models"
-	"github.com/decisionstack/sync/internal/redis"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"

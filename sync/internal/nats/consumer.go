@@ -9,7 +9,6 @@ import (
 
 	"github.com/decisionstack/sync/internal/config"
 	"github.com/decisionstack/sync/internal/logger"
-	"github.com/decisionstack/sync/internal/models"
 	"github.com/google/uuid"
 	natsgo "github.com/nats-io/nats.go"
 )
@@ -20,7 +19,7 @@ type Consumer struct {
 	js           natsgo.JetStreamContext
 	cfg          *config.Config
 	handlers     map[string]MessageHandler
-	subscriptions []natsgo.Subscription
+	subscriptions []*natsgo.Subscription
 	maxDeliver   int
 	dlqSubject   string
 }
@@ -134,8 +133,8 @@ func (c *Consumer) Close() {
 
 // sendToDLQ forwards a failed message to the dead-letter subject.
 func (c *Consumer) sendToDLQ(msg *natsgo.Msg) {
-	log := logger.With("dlq_subject", c.dlqSubject, "original_subject", msg.Subject)
-	if err := c.js.Publish(c.dlqSubject, msg.Data); err != nil {
+	log := logger.L().With("dlq_subject", c.dlqSubject, "original_subject", msg.Subject)
+	if _, err := c.js.Publish(c.dlqSubject, msg.Data); err != nil {
 		log.Error("dlq publish failed", "error", err)
 		msg.Nak()
 		return

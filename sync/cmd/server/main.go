@@ -338,8 +338,8 @@ func handleListDevices(db *dbpkg.DB) http.HandlerFunc {
 
 func handleListNotifications(db *dbpkg.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := auth.UserIDFromContext(r.Context())
-		if userID == uuid.Nil {
+		userID, err := auth.MustGetUserID(r.Context())
+		if err != nil {
 			sendError(w, http.StatusUnauthorized, models.ErrCodeAuthExpired, "Authentication required")
 			return
 		}
@@ -361,8 +361,8 @@ func handleListNotifications(db *dbpkg.DB) http.HandlerFunc {
 
 func handleMarkNotificationRead(db *dbpkg.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := auth.UserIDFromContext(r.Context())
-		if userID == uuid.Nil {
+		userID, err := auth.MustGetUserID(r.Context())
+		if err != nil {
 			sendError(w, http.StatusUnauthorized, models.ErrCodeAuthExpired, "Authentication required")
 			return
 		}
@@ -374,7 +374,7 @@ func handleMarkNotificationRead(db *dbpkg.DB) http.HandlerFunc {
 		}
 
 		now := time.Now()
-		_, err := db.Exec(
+		_, err = db.Exec(
 			"UPDATE notifications SET read_at = $1 WHERE id = $2 AND user_id = $3",
 			now, notifID, userID,
 		)
@@ -390,8 +390,8 @@ func handleMarkNotificationRead(db *dbpkg.DB) http.HandlerFunc {
 
 func handleUpdateNotificationPreferences(db *dbpkg.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := auth.UserIDFromContext(r.Context())
-		if userID == uuid.Nil {
+		userID, err := auth.MustGetUserID(r.Context())
+		if err != nil {
 			sendError(w, http.StatusUnauthorized, models.ErrCodeAuthExpired, "Authentication required")
 			return
 		}
@@ -408,8 +408,8 @@ func handleUpdateNotificationPreferences(db *dbpkg.DB) http.HandlerFunc {
 
 func handleQueueCount(redis *redispkg.Redis) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := auth.UserIDFromContext(r.Context())
-		if userID == uuid.Nil {
+		userID, err := auth.MustGetUserID(r.Context())
+		if err != nil {
 			sendError(w, http.StatusUnauthorized, models.ErrCodeAuthExpired, "Authentication required")
 			return
 		}
@@ -428,8 +428,8 @@ func handleQueueCount(redis *redispkg.Redis) http.HandlerFunc {
 
 func handleQueueVersion(redis *redispkg.Redis) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		userID := auth.UserIDFromContext(r.Context())
-		if userID == uuid.Nil {
+		userID, err := auth.MustGetUserID(r.Context())
+		if err != nil {
 			sendError(w, http.StatusUnauthorized, models.ErrCodeAuthExpired, "Authentication required")
 			return
 		}

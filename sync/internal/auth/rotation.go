@@ -35,6 +35,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -385,7 +386,7 @@ func (kr *KeyRotator) persistRecordLocked() error {
 	if err != nil {
 		// Handle ResourceExistsException by updating instead
 		var resourceExists *types.ResourceExistsException
-		if fmt.Sprintf("%T", err) == "*types.ResourceExistsException" || fmt.Sprintf("%T", err) == resourceExists {
+		if errors.As(err, &resourceExists) {
 			_, err = kr.secretsClient.UpdateSecret(ctx, &secretsmanager.UpdateSecretInput{
 				SecretId:     aws.String(kr.secretARN),
 				SecretString: aws.String(string(recordJSON)),
