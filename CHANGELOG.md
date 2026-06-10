@@ -1,36 +1,82 @@
-# \# Changelog
+# Changelog
 
-# 
+All notable changes to this project are documented here.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-# \## \[2.0.0] - 2026-06-07
+---
 
-# 
+## [Unreleased]
 
-# \### Added
+### In Progress
+- Phase 2: Ingestion Worker (poll scheduler, MIME parse, thread reconstruction, NATS publish)
 
-# \- Send pipeline (6 gaps closed)
+---
 
-# \- SyncNatsAdapter bridging sync to NATS
+## [0.2.0] — 2026-06-10 — Phase 1: Ingestion Server
 
-# \- Calendar chat integration
+### Added
+- **`ingestion/internal/oauth/handler.go`** — Full OAuth 2.0 handler for Google and Microsoft.
+  - CSRF state stored in Redis with 10-minute TTL (consumed on use)
+  - Code exchange via `google.go` / `microsoft.go` providers
+  - User email fetched from Google userinfo API and Microsoft Graph `/me`
+  - User row created/updated via `upsertUser` (INSERT ON CONFLICT)
+  - Encrypted tokens written via new `UpsertAccountWithTokens`
+  - Backfill `onSuccess` callback fired after successful connect
+  - Providers only instantiated when credentials are configured (dev mode: 503 not 500)
+- **`ingestion/internal/oauth/storage.go`** — `UpsertAccountWithTokens` method for initial OAuth account creation (INSERT ON CONFLICT on `user_id, email_address`).
+- **`ingestion/internal/parse/signature_nocgo.go`** — Regex-only `SignatureClassifier` stub for `windows || !cgo` builds. Identical public API to the ONNX version.
+- **`ingestion/internal/crypto/token.go`** — `Close()` method on `TokenCrypto` to stop the background DEK cache cleanup goroutine cleanly.
 
-# \- 14 Python stubs for offline builds
+### Fixed
+- **`ingestion/internal/oauth/storage.go`** — All SQL column names corrected to match the actual schema:
+  - `refresh_token` → `refresh_token_enc`
+  - `access_token` → `access_token_enc`
+  - `expires_at` → `token_expires_at`
+  - `scope_granted` changed from JSON string to `pq.Array` (`TEXT[]`)
+- **`ingestion/internal/config/config.go`** — Removed `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET` from the required-at-startup list; service now boots in dev without OAuth credentials.
+- **`ingestion/internal/server/router.go`** — Replaced Phase 0 `notImpl` stub routes with `r.Mount("/auth", deps.OAuthHandler.Routes())`.
+- **`ingestion/cmd/server/main.go`** — Updated `oauth.NewHandler` call to pass `tokenStore` (pointer), `cfg`, and `redisClient.Client()`.
+- **`ingestion/internal/parse/html.go`** — Replaced nonexistent `html2text.WithUnixLineEndings()` with `html2text.Options{TextOnly: true}`.
+- **`ingestion/internal/parse/mime.go`** — Fixed `mime.WordDecoder.DecodeHeader` (value receiver → pointer receiver `&mime.WordDecoder{}`).
+- **`ingestion/internal/parse/signature.go`** — Added `//go:build !windows && cgo` to prevent link failure when CGO is disabled (Docker: `CGO_ENABLED=0`).
+- **`ingestion/internal/fetch/outlook.go`** — Fixed missing second return value `(nil, nil)` in `handleErrorResponse` call.
+- **`ingestion/cmd/worker/main.go`** — Stripped NUL bytes at EOF that caused Go parser to reject the file.
+- **`ingestion/internal/nats/send_consumer_gap_test.go`** — Removed duplicate `strPtr` helper (defined in `send_consumer_test.go`); removed now-unused `fmt` import.
+- **`ingestion/internal/nats/send_consumer_test.go`** — Changed `msgID, err :=` to `_, err :=` in `TestMockProviderSendEmailErrorCase` (unused variable).
+- **`.github/workflows/ci.yml`** — Changed ingestion test step to `CGO_ENABLED: 0` so CI does not attempt to link onnxruntime (unavailable on ubuntu-latest runner without native install).
 
-# \- Integration test suites
+### Changed
+- **`ingestion/internal/oauth/storage.go`** — `SaveTokens` rewritten as UPDATE-only (INSERT was broken — missing NOT NULL columns); callers needing initial creation use `UpsertAccountWithTokens`. Extracted `encryptAndMarshal` helper to reduce duplication.
+- **`intelligence/app/models.py`** — Removed `agent_name`, `agent_tone` fields (design violation: no agent personality).
+- **`intelligence/app/profile/service.py`** — Removed `agent_name`, `agent_tone` from `Profile` dataclass and `update()`.
+- **`intelligence/app/profile/router.py`** — Removed personality fields from API responses.
+- **`intelligence/app/profile/models.py`** — Was scaffolding script accidentally written to wrong path; replaced with real Pydantic models.
+- **`intelligence/app/agent/orchestrator.py`** — Replaced agent personality prompts with neutral "You are an email agent."
+- **`intelligence/app/drafting/service.py`** — Replaced personality-based draft prompts with neutral wording.
+- **`intelligence/alembic/versions/001_initial.py`** — Removed `agent_name`, `agent_tone` columns from `profiles` table migration.
 
-# 
+---
 
-# \### Fixed
+## [0.1.0] — 2026-06-07 — Phase 0: Foundation
 
-# \- CI path references (services/X -\&gt; X)
+### Added
+- Root `docker-compose.yml` — all 9 service containers + Postgres, Redis, NATS JetStream, Neo4j, Qdrant, MinIO
+- Root `Makefile` — `make dev`, `make up`, `make down`, `make test`, `make migrate-*`
+- `.github/workflows/ci.yml` — CI pipeline: per-service Go tests, isolated Python venvs, Docker build + ECR push + ECS deploy
+- `shared/logutil/logger.go` — standalone `slog` wrapper used by all Go services
+- `ingestion/cmd/server/main.go` — server entrypoint calling `srv.Run()`
+- `ingestion/internal/config/config.go` — environment-based config with manual mapping
+- `ingestion/internal/server/router.go` — chi router with middleware and stub `/auth` routes
 
-# \- 204 status code bug in contact router
+### Fixed
+- `ingestion/internal/oauth/handler.go` — replaced broken stub with compilable placeholder
+- `intelligence/alembic/versions/001_initial.py` — deleted duplicate migration `f9e0341216c3_initial.py` that caused `alembic upgrade head` to fail with multiple heads
 
-# \- Duplicate Claims type in sync auth
-
-# 
-
-# \### Infrastructure
-
-# \- Terraform FIXMEs documented
-
+### Removed
+- Root scaffolding scripts (`add_client_api.py`, `add_llm.py`, `rewrite_beginner.py`)
+- Stray root `ingestion-server-main.go`
+- Invalid terminal artifact `intelligence/Dict[str`
+- Compiled binary `ingestion/server.exe`
+- Named backup directories `client-backup/`, `intelligence-backup/`
+- Dev artifacts `ingestion/scrape_repo.ps1`, `ingestion/codebase_snapshot.md`
+- Stale pycache from deleted migrations

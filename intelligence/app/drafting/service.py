@@ -38,14 +38,11 @@ class DraftingService:
             raise ValueError(f"Email {email_id} not found")
 
         context_str = self.kb.summarize_for_agent(thread_context)
-        tone = profile.agent_tone if profile else "professional"
-        name = profile.agent_name if profile else "Reagent"
         suffix = profile.system_prompt_suffix if profile else ""
         instruction = user_instruction or self._default_instruction(decision_action)
 
-        prompt = f"""You are {name}. Tone: {tone}. {suffix}
+        prompt = f"""You are an email agent drafting a reply on behalf of the user. Be direct and concise. Do not send — the user reviews first. {suffix}
 
-You are drafting an email reply on behalf of the user. Do not send it yet — the user will review first.
 
 Thread context:
 {context_str}
@@ -60,11 +57,11 @@ Return ONLY the draft text. No JSON, no markdown, no explanation."""
         draft_text = response.text.strip()
         subject = email.subject
         if draft_text.startswith("Subject:"):
-            parts = draft_text.split("\n", 1)
+            parts = draft_text.split("
+", 1)
             subject = parts[0].replace("Subject:", "").strip()
             draft_text = parts[1].strip() if len(parts) > 1 else draft_text
 
-        # Persist draft as a decision record
         import asyncio
         asyncio.create_task(self._persist_draft(user_id, email_id, decision_action, draft_text))
 
@@ -88,11 +85,7 @@ Return ONLY the draft text. No JSON, no markdown, no explanation."""
         email = thread[0] if thread else None
         if not email:
             raise ValueError(f"Email {email_id} not found")
-        profile = self.profile.get_or_create(user_id) if self.profile else None
-        tone = profile.agent_tone if profile else "professional"
-        name = profile.agent_name if profile else "Reagent"
-
-        prompt = f"""You are {name}. Tone: {tone}.
+        prompt = f"""You are an email agent. Be direct and concise.
 
 Draft a forwarding email to {forward_to}. Include the original email below your note.
 
@@ -115,7 +108,6 @@ Return ONLY the draft text."""
 
     def edit_draft(self, card_id: str, edit_text: str) -> Dict[str, Any]:
         """Apply user edits to a draft. Returns updated draft."""
-        # For now, just re-draft with the edit as instruction
         prompt = f"""The user has edited their draft. Apply their changes and return the full updated draft.
 
 User edit instruction: {edit_text}
@@ -126,7 +118,8 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
         draft_text = response.text.strip()
         subject = ""
         if draft_text.startswith("Subject:"):
-            parts = draft_text.split("\n", 1)
+            parts = draft_text.split("
+", 1)
             subject = parts[0].replace("Subject:", "").strip()
             draft_text = parts[1].strip() if len(parts) > 1 else draft_text
 
@@ -153,7 +146,8 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
                 resp = await client.post(
                     f"{ingestion_url}/api/v1/send",
                     json={
-                        "to": decision.draft_text.split("\n")[0] if decision.draft_text else "",
+                        "to": decision.draft_text.split("
+")[0] if decision.draft_text else "",
                         "subject": "Re: " + (decision.draft_text[:50] if decision.draft_text else ""),
                         "body": decision.draft_text,
                         "draft_id": str(draft_id),
@@ -161,7 +155,6 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
                 )
                 resp.raise_for_status()
                 data = resp.json()
-                # Update sent_at
                 async with db_session() as db:
                     from sqlalchemy import select
                     result = await db.execute(select(DecisionModel).where(DecisionModel.id == draft_id))
@@ -179,7 +172,7 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
             decision = DecisionModel(
                 id=str(__import__("uuid").uuid4()),
                 user_id=user_id,
-                card_id=email_id,  # Using email_id as card_id reference for now
+                card_id=email_id,
                 action_type=action_type,
                 draft_text=draft_text,
                 created_at=datetime.utcnow(),

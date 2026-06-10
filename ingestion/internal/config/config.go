@@ -62,7 +62,7 @@ type Config struct {
 	OutlookQuotaPer10Min int           `env:"OUTLOOK_QUOTA_PER_10MIN,default=10000"`
 
 	// OCR Microservice
-	OCREndpoint          string        `env:"OCR_ENDPOINT,default=http://localhost:8081"`
+	OCREndpoint          string        `env:"OCR_ENDPOINT,default=http://localhost:8001"`
 
 	// Logging
 	LogLevel             string        `env:"LOG_LEVEL,default=info"`
@@ -112,7 +112,7 @@ func Load() (*Config, error) {
 		"GOOGLE_REDIRECT_URI":      "http://localhost:8080/auth/google/callback",
 		"MICROSOFT_REDIRECT_URI":   "http://localhost:8080/auth/microsoft/callback",
 		"NEO4J_USER":               "neo4j",
-		"OCR_ENDPOINT":             "http://localhost:8081",
+		"OCR_ENDPOINT":             "http://localhost:8001",
 		"LOG_LEVEL":                "info",
 		"LOG_FORMAT":               "json",
 		"ENVIRONMENT":              "development",
@@ -125,10 +125,6 @@ func Load() (*Config, error) {
 		"NATS_URL",
 		"S3_BUCKET",
 		"KMS_KEY_ID",
-		"GOOGLE_CLIENT_ID",
-		"GOOGLE_CLIENT_SECRET",
-		"MICROSOFT_CLIENT_ID",
-		"MICROSOFT_CLIENT_SECRET",
 		"NEO4J_URI",
 		"NEO4J_PASSWORD",
 	}

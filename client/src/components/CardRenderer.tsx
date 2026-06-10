@@ -11,7 +11,6 @@ export default function CardRenderer({ payload, onAction }: Props) {
   const [editing, setEditing] = useState(false)
 
   const isConfirm = payload.card_type === 'confirm'
-  const isDecision = payload.card_type === 'decision'
 
   return (
     <div className="mt-2 border border-slate-700 rounded-md overflow-hidden">

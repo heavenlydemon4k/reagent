@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """OCR service configuration loaded from environment variables."""
 
-    port: int = 8081
+    port: int = 8001
     host: str = "0.0.0.0"
     log_level: str = "info"
     tesseract_cmd: str = "/usr/bin/tesseract"

@@ -10,7 +10,7 @@
 #   docker build --target development -t tts-service:dev .
 #
 # Run:
-#   docker run -p 8002:8002 -e TTS_ELEVENLABS_API_KEY=xxx tts-service
+#   docker run -p 8003:8003 -e TTS_ELEVENLABS_API_KEY=xxx tts-service
 # =============================================================================
 
 # ------------------------------------------------------------------------------
@@ -60,12 +60,12 @@ RUN mkdir -p /data && chown tts:tts /data
 
 USER tts
 
-EXPOSE 8002
+EXPOSE 8003
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002", "--log-level", "info"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003", "--log-level", "info"]
 
 # ------------------------------------------------------------------------------
 # Stage 4: Development
@@ -82,6 +82,6 @@ COPY tests/ ./tests/
 
 RUN mkdir -p /data
 
-EXPOSE 8002
+EXPOSE 8003
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002", "--reload", "--log-level", "debug"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003", "--reload", "--log-level", "debug"]

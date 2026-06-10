@@ -14,7 +14,6 @@ package nats
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -490,9 +489,7 @@ func TestSendPipelineIntegrity(t *testing.T) {
 // Helpers
 // ============================================================================
 
-func strPtr(s string) *string {
-	return &s
-}
+// strPtr is defined in send_consumer_test.go
 
 // Ensure SendJobPayload can be constructed for gap tests.
 var _ = SendJobPayload{}

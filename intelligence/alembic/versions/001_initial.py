@@ -4,7 +4,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-# revision identifiers
 revision = "001"
 down_revision = None
 branch_labels = None
@@ -12,7 +11,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # users
     op.create_table(
         "users",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -21,18 +19,14 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
     )
 
-    # profiles
     op.create_table(
         "profiles",
         sa.Column("user_id", sa.String(36), sa.ForeignKey("users.id"), primary_key=True),
-        sa.Column("agent_name", sa.String(100), nullable=False, server_default="Reagent"),
-        sa.Column("agent_tone", sa.String(50), nullable=False, server_default="professional"),
         sa.Column("system_prompt_suffix", sa.Text(), nullable=True),
         sa.Column("preferences_json", postgresql.JSON(), nullable=True),
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
     )
 
-    # chat_sessions
     op.create_table(
         "chat_sessions",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -47,7 +41,6 @@ def upgrade() -> None:
     )
     op.create_index("idx_sessions_user_id", "chat_sessions", ["user_id"])
 
-    # messages
     op.create_table(
         "messages",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -62,7 +55,6 @@ def upgrade() -> None:
     )
     op.create_index("idx_messages_session_id", "messages", ["session_id"])
 
-    # cards
     op.create_table(
         "cards",
         sa.Column("id", sa.String(36), primary_key=True),
@@ -81,7 +73,6 @@ def upgrade() -> None:
     op.create_index("idx_cards_user_id_status", "cards", ["user_id", "status"])
     op.create_index("idx_cards_session_id", "cards", ["session_id"])
 
-    # decisions
     op.create_table(
         "decisions",
         sa.Column("id", sa.String(36), primary_key=True),

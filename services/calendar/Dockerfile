@@ -25,9 +25,9 @@ RUN chown -R app:app /app
 USER app
 
 # Run
-EXPOSE 8003
+EXPOSE 8004
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD wget --spider -q http://localhost:8003/health || exit 1
+  CMD wget --spider -q http://localhost:8004/health || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8003"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8004"]

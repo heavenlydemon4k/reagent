@@ -127,23 +127,26 @@ class EmailKnowledgeBase:
     def summarize_for_agent(self, contexts: List[EmailContext]) -> str:
         lines = []
         for ctx in contexts:
-            snippet = ctx.body_text[:500].replace("\n", " ")
+            snippet = ctx.body_text[:500].replace("
+", " ")
             lines.append(
                 f"[Email {ctx.email_id}] From: {ctx.from_address} | Subject: {ctx.subject} | "
-                f"Date: {ctx.received_at}\n{snippet}"
+                f"Date: {ctx.received_at}
+{snippet}"
             )
-        return "\n\n".join(lines)
+        return "
+
+".join(lines)
 
     def _embed(self, text: str) -> List[float]:
         """Real OpenAI embedding via text-embedding-3-small."""
         try:
             resp = self._openai.embeddings.create(
                 model="text-embedding-3-small",
-                input=text[:8000],  # truncate to max
+                input=text[:8000],
             )
             return resp.data[0].embedding
         except Exception:
-            # Fallback: return zero vector so Qdrant doesn't crash
             return [0.0] * 1536
 
     def close(self):

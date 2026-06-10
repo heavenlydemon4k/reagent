@@ -12,17 +12,13 @@ from alembic import context
 from intelligence.app.models import Base
 from intelligence.app.db import DATABASE_URL
 
-# this is the Alembic Config object
 config = context.config
 
-# Interpret the config file for Python logging
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# add your model's MetaData object here for 'autogenerate' support
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url from env
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 

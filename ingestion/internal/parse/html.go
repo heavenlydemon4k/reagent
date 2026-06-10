@@ -39,9 +39,10 @@ func (c *HTMLConverter) ToText(html string) (string, error) {
 	html = stripBlocks(html, "head")
 
 	// Use html2text with options tuned for email content.
-	text, err := html2text.FromString(html,
-		html2text.WithUnixLineEndings(),
-	)
+	text, err := html2text.FromString(html, html2text.Options{
+		OmitLinks: false,
+		TextOnly:  true,
+	})
 	if err != nil {
 		// If html2text fails, fall back to a minimal regex-based strip.
 		text = fallbackStripHTML(html)

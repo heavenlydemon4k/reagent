@@ -40,7 +40,6 @@ class DecisionStackService:
         """Called by NATS consumer when Classification emits a critical email."""
         thread = self.kb.thread_context(email.email_id)
         card = self._generate_card(user_id, email, thread)
-        # Persist to DB
         async with db_session() as db:
             from datetime import datetime
             db_card = CardModel(
@@ -118,7 +117,7 @@ Only return valid JSON. No markdown, no explanation."""
     async def activate_next(self, user_id: str, session_id: str) -> Optional[DecisionCard]:
         """Get next queued card for user, mark active, assign session."""
         async with db_session() as db:
-            from sqlalchemy import select, update
+            from sqlalchemy import select
             from intelligence.app.models import CardModel
             result = await db.execute(
                 select(CardModel)
@@ -197,7 +196,6 @@ Only return valid JSON. No markdown, no explanation."""
             if not card:
                 return {"error": "Card not found"}
 
-            # Get latest decision draft
             dec_result = await db.execute(
                 select(DecisionModel)
                 .where(DecisionModel.card_id == card_id)
@@ -208,12 +206,10 @@ Only return valid JSON. No markdown, no explanation."""
             if not decision:
                 return {"error": "No draft found for this card"}
 
-            # Call Ingestion send API
             sent = await self._call_ingestion_send(decision)
             if not sent.get("success"):
                 return {"error": sent.get("error", "Send failed")}
 
-            # Mark resolved
             card.status = "resolved"
             card.resolved_at = __import__("datetime").datetime.utcnow()
             decision.sent_at = __import__("datetime").datetime.utcnow()
@@ -230,7 +226,8 @@ Only return valid JSON. No markdown, no explanation."""
                 resp = await client.post(
                     f"{ingestion_url}/api/v1/send",
                     json={
-                        "to": decision.draft_text.split("\n")[0] if decision.draft_text else "",
+                        "to": decision.draft_text.split("
+")[0] if decision.draft_text else "",
                         "subject": "Re: " + (decision.draft_text[:50] if decision.draft_text else ""),
                         "body": decision.draft_text,
                         "draft_id": str(decision.id),

@@ -213,7 +213,7 @@ func main() {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
 	r.Use(appmiddleware.SecurityHeaders)
-	r.Use(appmiddleware.WithRateLimits(redisClient))
+	r.Use(appmiddleware.WithRateLimits(redis.Client(), appmiddleware.DefaultRateLimits()))
 
 	// ============================================================================
 	// PUBLIC ROUTES (no auth required)

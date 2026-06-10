@@ -249,7 +249,7 @@ func TestMockProviderSendEmailErrorCase(t *testing.T) {
 	mockProvider := mocks.NewMockGmailProvider()
 	mockProvider.SendEmailErr = fmt.Errorf("network error")
 
-	msgID, err := mockProvider.SendEmail(context.Background(), "token", models.SendEmailRequest{
+	_, err := mockProvider.SendEmail(context.Background(), "token", models.SendEmailRequest{
 		To:       "to@example.com",
 		Subject:  "Subject",
 		BodyText: "Body",
@@ -257,8 +257,6 @@ func TestMockProviderSendEmailErrorCase(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	// Mock returns auto-generated ID even on error unless explicitly cleared
-	// but the error should still be returned
 	if err.Error() != "network error" {
 		t.Errorf("error = %v, want 'network error'", err)
 	}

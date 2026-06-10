@@ -1,0 +1,619 @@
+# ==============================================================================
+# Reagent — Root docker-compose.yml
+#
+# Includes:
+#   Infrastructure : Postgres, Redis, NATS JetStream, Neo4j, Qdrant, MinIO
+#   Setup jobs     : NATS stream provisioning, Qdrant collection provisioning,
+#                    MinIO bucket provisioning
+#   Application    : ingestion, classification, intelligence, sync,
+#                    ocr, stt, tts, calendar, client
+#
+# Usage:
+#   make up            # start everything
+#   make dev           # start infra only (uses infra/docker/docker-compose.yml)
+#   docker compose logs -f ingestion
+# ==============================================================================
+
+version: "3.9"
+
+# ------------------------------------------------------------------------------
+# Shared environment snippets
+# ------------------------------------------------------------------------------
+x-pg-env: &pg-env
+  POSTGRES_DSN: ${POSTGRES_DSN:-postgres://reagent:reagent@postgres:5432/reagent?sslmode=disable}
+  DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://reagent:reagent@postgres:5432/reagent}
+
+x-nats-env: &nats-env
+  NATS_URL: ${NATS_URL:-nats://nats:4222}
+
+x-redis-env: &redis-env
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+
+x-neo4j-env: &neo4j-env
+  NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
+  NEO4J_USER: ${NEO4J_USER:-neo4j}
+  NEO4J_PASSWORD: ${NEO4J_PASSWORD:-reagent}
+
+x-qdrant-env: &qdrant-env
+  QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+  QDRANT_API_KEY: ${QDRANT_API_KEY:-qdrant_dev_key_change_me}
+
+x-minio-env: &minio-env
+  S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+  S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
+  S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
+  S3_BUCKET: ${S3_BUCKET:-reagent-attachments}
+  S3_REGION: ${S3_REGION:-us-east-1}
+
+x-jwt-env: &jwt-env
+  JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production}
+
+services:
+  # ============================================================================
+  # INFRASTRUCTURE
+  # ============================================================================
+
+  # ----------------------------------------------------------------------------
+  # PostgreSQL 16
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: reagent-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-reagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reagent}
+      POSTGRES_DB: ${POSTGRES_DB:-reagent}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-reagent} -d ${POSTGRES_DB:-reagent}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # Redis 7
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: reagent-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # NATS 2.10 with JetStream
+  # ----------------------------------------------------------------------------
+  nats:
+    image: nats:2.10-alpine
+    container_name: reagent-nats
+    restart: unless-stopped
+    ports:
+      - "4222:4222"   # client
+      - "8222:8222"   # HTTP monitor
+      - "6222:6222"   # cluster
+    command: >
+      --jetstream
+      --store_dir /data/jetstream
+      --max_memory_store 512Mi
+      --max_file_store 10Gi
+      --http_port 8222
+      --port 4222
+    volumes:
+      - nats_jetstream:/data/jetstream
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - reagent
+
+  # Provision JetStream streams after NATS is healthy
+  nats-setup:
+    image: natsio/nats-cli:0.1.4
+    container_name: reagent-nats-setup
+    restart: "no"
+    depends_on:
+      nats:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c '
+      sleep 3 &&
+      nats --server nats://nats:4222 stream add EMAIL_INGESTED
+        --subjects "email.ingested"
+        --storage file --retention work
+        --max-msgs=-1 --max-bytes=-1 --max-age=-1
+        --replicas 1 --yes 2>/dev/null || true &&
+      nats --server nats://nats:4222 stream add EMAIL_CLASSIFIED
+        --subjects "email.classified"
+        --storage file --retention work
+        --max-msgs=-1 --max-bytes=-1 --max-age=-1
+        --replicas 1 --yes 2>/dev/null || true &&
+      nats --server nats://nats:4222 stream add INTELLIGENCE_COMPRESS
+        --subjects "intelligence.compress"
+        --storage file --retention work
+        --max-msgs=-1 --max-bytes=-1
+        --replicas 1 --yes 2>/dev/null || true &&
+      echo "=== NATS streams configured ==="
+      '
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # Qdrant 1.8 (vector store)
+  # ----------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:v1.8.1
+    container_name: reagent-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"   # HTTP + gRPC
+      - "6334:6334"   # gRPC
+    environment:
+      QDRANT__SERVICE__API_KEY: ${QDRANT_API_KEY:-qdrant_dev_key_change_me}
+    volumes:
+      - qdrant_data:/qdrant/storage
+      - qdrant_snapshots:/qdrant/snapshots
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:6333/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - reagent
+
+  # Provision Qdrant collections after Qdrant is healthy
+  qdrant-setup:
+    image: curlimages/curl:latest
+    container_name: reagent-qdrant-setup
+    restart: "no"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c '
+      sleep 3 &&
+      curl -sfS -X PUT http://qdrant:6333/collections/emails
+        -H "Content-Type: application/json"
+        -d "{\"vectors\":{\"size\":1536,\"distance\":\"Cosine\",\"on_disk\":true},\"on_disk_payload\":true}"
+        2>/dev/null || true &&
+      echo "=== Qdrant collections created ==="
+      '
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # Neo4j 5 Community (contact graph)
+  # ----------------------------------------------------------------------------
+  neo4j:
+    image: neo4j:5.16-community
+    container_name: reagent-neo4j
+    restart: unless-stopped
+    ports:
+      - "7474:7474"   # HTTP browser
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: ${NEO4J_AUTH:-neo4j/reagent}
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*,gds.*"
+      NEO4J_dbms_security_procedures_allowlist: "apoc.*,gds.*"
+      NEO4J_apoc_export_file_enabled: "true"
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/var/lib/neo4j/import
+      - neo4j_plugins:/plugins
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474/dbms/health || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # MinIO (S3-compatible object store for attachments)
+  # ----------------------------------------------------------------------------
+  minio:
+    image: minio/minio:latest
+    container_name: reagent-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Console
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - reagent
+
+  # Provision MinIO bucket after MinIO is healthy
+  minio-setup:
+    image: minio/mc:latest
+    container_name: reagent-minio-setup
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c '
+      sleep 3 &&
+      mc alias set local http://minio:9000 ${S3_ACCESS_KEY:-minioadmin} ${S3_SECRET_KEY:-minioadmin} &&
+      mc mb local/${S3_BUCKET:-reagent-attachments} --ignore-existing &&
+      mc anonymous set none local/${S3_BUCKET:-reagent-attachments} &&
+      echo "=== MinIO bucket ready ==="
+      '
+    networks:
+      - reagent
+
+  # ============================================================================
+  # APPLICATION SERVICES
+  # ============================================================================
+
+  # ----------------------------------------------------------------------------
+  # Ingestion Service (Go :8080)
+  # Fetches email, parses, threads, deduplicates, publishes email.ingested
+  # ----------------------------------------------------------------------------
+  ingestion:
+    build:
+      context: ./ingestion
+      dockerfile: Dockerfile
+    image: reagent/ingestion:local
+    container_name: reagent-ingestion
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      <<: [*pg-env, *nats-env, *redis-env, *neo4j-env, *minio-env, *jwt-env]
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVER_PORT: "8080"
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      KMS_KEY_ID: ${KMS_KEY_ID:-}
+      OCR_ENDPOINT: http://ocr:8001
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # Classification Service (Go :8081)
+  # Consumes email.ingested, routes to auto / stack / notify
+  # ----------------------------------------------------------------------------
+  classification:
+    build:
+      context: ./classification
+      dockerfile: Dockerfile
+    image: reagent/classification:local
+    container_name: reagent-classification
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      <<: [*nats-env, *jwt-env]
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVER_PORT: "8081"
+      # classification config uses split DB vars (DB_HOST, DB_PORT, etc.) not DATABASE_URL
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-reagent}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-reagent}
+      DB_NAME: ${POSTGRES_DB:-reagent}
+      DB_SSLMODE: prefer
+      # classification config uses REDIS_ADDR not REDIS_URL
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      nats-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8081/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # Intelligence Service (Python :8000)
+  # Card generation, chat, drafting, KB queries
+  # ----------------------------------------------------------------------------
+  intelligence:
+    build:
+      context: ./intelligence
+      dockerfile: Dockerfile
+    image: reagent/intelligence:local
+    container_name: reagent-intelligence
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      <<: [*pg-env, *nats-env, *qdrant-env, *neo4j-env, *jwt-env]
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      INGESTION_URL: ${INGESTION_URL:-http://ingestion:8080}
+      SYNC_URL: ${SYNC_URL:-http://sync:8082}
+      CALENDAR_URL: ${CALENDAR_URL:-http://calendar:8004}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      nats-setup:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # Sync Service (Go :8082)
+  # WebSocket hub, session state, REST API, source verification
+  # ----------------------------------------------------------------------------
+  sync:
+    build:
+      context: ./sync
+      dockerfile: Dockerfile
+    image: reagent/sync:local
+    container_name: reagent-sync
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      <<: [*pg-env, *nats-env, *jwt-env]
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      SERVER_PORT: "8082"
+      # sync config uses REDIS_ADDR (host:port) not REDIS_URL
+      REDIS_ADDR: redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: "0"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8082/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # OCR Service (Python :8001)
+  # Image / PDF text extraction
+  # ----------------------------------------------------------------------------
+  ocr:
+    build:
+      context: ./services/ocr
+      dockerfile: Dockerfile
+    image: reagent/ocr:local
+    container_name: reagent-ocr
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # OCR service reads OCR_PORT and OCR_HOST (pydantic-settings with OCR_ prefix)
+      OCR_PORT: "8001"
+      OCR_HOST: "0.0.0.0"
+      OCR_LOG_LEVEL: ${LOG_LEVEL:-info}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # STT Service (Python :8002)
+  # Speech-to-text via Deepgram
+  # ----------------------------------------------------------------------------
+  stt:
+    build:
+      context: ./services/stt
+      dockerfile: Dockerfile
+    image: reagent/stt:local
+    container_name: reagent-stt
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # TTS Service (Python :8003)
+  # Text-to-speech via ElevenLabs
+  # ----------------------------------------------------------------------------
+  tts:
+    build:
+      context: ./services/tts
+      dockerfile: Dockerfile
+    image: reagent/tts:local
+    container_name: reagent-tts
+    restart: unless-stopped
+    ports:
+      - "8003:8003"
+    environment:
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8003/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # Calendar Service (Python :8004)
+  # Google Calendar read/write (write gated)
+  # ----------------------------------------------------------------------------
+  calendar:
+    build:
+      context: ./services/calendar
+      dockerfile: Dockerfile
+    image: reagent/calendar:local
+    container_name: reagent-calendar
+    restart: unless-stopped
+    ports:
+      - "8004:8004"
+    environment:
+      <<: *pg-env
+      ENV: ${ENV:-development}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8004/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - reagent
+
+  # ----------------------------------------------------------------------------
+  # Client (React/TypeScript :3000)
+  # Chat interface + decision stack + inbox viewer
+  # ----------------------------------------------------------------------------
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    image: reagent/client:local
+    container_name: reagent-client
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+      VITE_SYNC_URL: ${VITE_SYNC_URL:-http://localhost:8082}
+      VITE_WS_URL: ${VITE_WS_URL:-ws://localhost:8082/ws}
+    depends_on:
+      intelligence:
+        condition: service_healthy
+      sync:
+        condition: service_healthy
+    networks:
+      - reagent
+
+# ==============================================================================
+# Networks
+# ==============================================================================
+networks:
+  reagent:
+    name: reagent
+    driver: bridge
+
+# ==============================================================================
+# Volumes
+# ==============================================================================
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
+  qdrant_snapshots:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:
+  neo4j_plugins:
+  nats_jetstream:
+  minio_data:

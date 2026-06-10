@@ -1,3 +1,10 @@
+// cmd/server/main.go — HTTP server entry point for the Ingestion Mesh.
+//
+// Initialises all dependencies (Postgres, Redis, NATS, KMS, Neo4j) and
+// starts the chi-based HTTP server on cfg.ServerPort.
+//
+// Phase 0: server starts and /health returns 200.
+// Phase 1: webhook and OAuth handlers are fully wired.
 package main
 
 import (
@@ -6,14 +13,18 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/google/uuid"
+
 	"github.com/decisionstack/ingestion/internal/backfill"
 	"github.com/decisionstack/ingestion/internal/config"
 	"github.com/decisionstack/ingestion/internal/crypto"
-	db "github.com/decisionstack/ingestion/internal/db"
+	"github.com/decisionstack/ingestion/internal/db"
+	"github.com/decisionstack/ingestion/internal/fetch"
 	"github.com/decisionstack/ingestion/internal/nats"
 	"github.com/decisionstack/ingestion/internal/oauth"
 	"github.com/decisionstack/ingestion/internal/redis"
-	"github.com/google/uuid"
+	"github.com/decisionstack/ingestion/internal/server"
+	"github.com/decisionstack/ingestion/internal/webhook"
 )
 
 func main() {
@@ -31,9 +42,9 @@ func run() error {
 
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
-	})).With("service", "server")
+	})).With("service", "ingestion")
 
-	// PostgreSQL
+	// ── PostgreSQL ────────────────────────────────────────────────────────────
 	database, err := db.New(cfg)
 	if err != nil {
 		log.Error("failed to connect to database", "error", err)
@@ -42,7 +53,7 @@ func run() error {
 	defer database.Close()
 	log.Info("database connected")
 
-	// Redis
+	// ── Redis ─────────────────────────────────────────────────────────────────
 	redisClient, err := redis.New(cfg)
 	if err != nil {
 		log.Error("failed to connect to redis", "error", err)
@@ -51,7 +62,7 @@ func run() error {
 	defer redisClient.Close()
 	log.Info("redis connected")
 
-	// NATS publisher
+	// ── NATS ──────────────────────────────────────────────────────────────────
 	natsPublisher, err := nats.NewPublisher(cfg.NATSURL)
 	if err != nil {
 		log.Error("failed to connect to NATS", "error", err)
@@ -60,42 +71,49 @@ func run() error {
 	defer natsPublisher.Close()
 	log.Info("nats connected")
 
-	// KMS client for token encryption
+	// ── KMS ───────────────────────────────────────────────────────────────────
 	kmsClient, err := crypto.NewKMSClient(cfg)
 	if err != nil {
-		log.Error("failed to initialize KMS client", "error", err)
+		log.Error("failed to initialise KMS client", "error", err)
 		return fmt.Errorf("init kms: %w", err)
 	}
 	defer kmsClient.Close()
+	log.Info("kms initialised")
 
-	// Token crypto for OAuth token encryption/decryption
+	// ── OAuth token crypto & store ────────────────────────────────────────────
 	tokenCrypto := crypto.NewTokenCrypto(kmsClient)
-
-	// Token store (reused from oauth package)
 	tokenStore := oauth.NewTokenStore(database.Pool(), tokenCrypto)
 
-	// Backfill scheduler — .Client() unwraps the go-redis client
+	// ── Backfill scheduler ────────────────────────────────────────────────────
 	bfScheduler := backfill.NewScheduler(redisClient.Client(), log)
 
-	// OAuth Handler
+	// ── OAuth handler ─────────────────────────────────────────────────────────
 	oauthHandler := oauth.NewHandler(
 		database.Pool(),
 		log,
-		*tokenStore, // dereference: NewHandler expects oauth.TokenStore value, not pointer
+		tokenStore,
+		cfg,
+		redisClient.Client(),
 		func(ctx context.Context, userID uuid.UUID) error {
-			// TODO: substitute the real method name from your backfill package.
-			// Common candidates: bfScheduler.Start(ctx, userID), bfScheduler.Schedule(ctx, userID), bfScheduler.Enqueue(ctx, userID)
-			_ = ctx
-			_ = userID
-			_ = bfScheduler
-			return nil
+			job := &backfill.BackfillJob{UserID: userID}
+			return bfScheduler.Enqueue(ctx, job)
 		},
 	)
 
-	// 4. Mount handlers to your router and start the engine
-	_ = natsPublisher
-	_ = oauthHandler
+	// ── Webhook handler ───────────────────────────────────────────────────────
+	enqueuer := fetch.NewEnqueuer(redisClient.Client(), natsPublisher, log)
+	webhookHandler := webhook.NewHandler(cfg, redisClient.Client(), natsPublisher, enqueuer, log)
 
-	log.Info("server initialized successfully")
-	return nil
+	// ── Server ────────────────────────────────────────────────────────────────
+	deps := &server.Dependencies{
+		Log:            log,
+		Config:         cfg,
+		WebhookHandler: webhookHandler,
+		OAuthHandler:   oauthHandler,
+		NATSPublisher:  natsPublisher,
+	}
+
+	srv := server.NewServer(cfg, deps)
+	log.Info("starting ingestion server", "addr", fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort))
+	return srv.Run()
 }

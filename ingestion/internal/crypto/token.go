@@ -35,6 +35,7 @@ type TokenCrypto struct {
 	dekCache  map[string]*cachedDEK // keyID -> decrypted DEK
 	mu        sync.RWMutex
 	cacheOnce sync.Once
+	done      chan struct{}
 }
 
 // NewTokenCrypto creates a new TokenCrypto instance backed by the given KMS client.
@@ -43,12 +44,21 @@ func NewTokenCrypto(kms *KMSClient) *TokenCrypto {
 	tc := &TokenCrypto{
 		kms:      kms,
 		dekCache: make(map[string]*cachedDEK),
+		done:     make(chan struct{}),
 	}
-
-	// Start background cache cleanup goroutine
 	go tc.cacheCleanupLoop()
-
 	return tc
+}
+
+// Close stops the background cache cleanup goroutine and wipes all cached DEKs.
+func (tc *TokenCrypto) Close() {
+	close(tc.done)
+	tc.mu.Lock()
+	for id, cached := range tc.dekCache {
+		Memzero(cached.dek)
+		delete(tc.dekCache, id)
+	}
+	tc.mu.Unlock()
 }
 
 // EncryptToken encrypts a plaintext token string using AES-256-GCM.
@@ -371,16 +381,20 @@ func (tc *TokenCrypto) cacheCleanupLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		tc.mu.Lock()
-		now := time.Now()
-		for id, cached := range tc.dekCache {
-			if cached.expiresAt.Before(now) {
-				// Securely wipe the DEK bytes before removing
-				Memzero(cached.dek)
-				delete(tc.dekCache, id)
+	for {
+		select {
+		case <-tc.done:
+			return
+		case <-ticker.C:
+			tc.mu.Lock()
+			now := time.Now()
+			for id, cached := range tc.dekCache {
+				if cached.expiresAt.Before(now) {
+					Memzero(cached.dek)
+					delete(tc.dekCache, id)
+				}
 			}
+			tc.mu.Unlock()
 		}
-		tc.mu.Unlock()
 	}
 }

@@ -18,13 +18,11 @@ nats_consumer = IntelligenceNatsConsumer()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events."""
-    # Startup
     await init_db()
     await nats_consumer.connect()
     await nats_consumer.subscribe()
     print("[Intelligence] DB initialized, NATS consumer connected.")
     yield
-    # Shutdown
     await nats_consumer.close()
     await engine.dispose()
     print("[Intelligence] Shutdown complete.")

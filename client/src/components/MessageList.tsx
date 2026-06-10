@@ -61,12 +61,10 @@ function MessageItem({ message, onCardAction, onSourceRequest }: {
         isSystem ? 'bg-slate-800 text-slate-400 text-xs italic' :
         'bg-slate-800 text-slate-100'
       }`}>
-        {/* Text content */}
         {message.content_text && (
           <div className="whitespace-pre-wrap">{message.content_text}</div>
         )}
 
-        {/* Card rendering */}
         {message.message_type === 'card' && message.card_payload && (
           <CardRenderer
             payload={message.card_payload}
@@ -74,12 +72,10 @@ function MessageItem({ message, onCardAction, onSourceRequest }: {
           />
         )}
 
-        {/* Source email inline */}
         {message.message_type === 'source' && message.source_email && (
           <SourceEmailBlock email={message.source_email} />
         )}
 
-        {/* Timestamp + Source button */}
         <div className="mt-1 flex items-center gap-2">
           <span className="text-[10px] opacity-60">
             {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}

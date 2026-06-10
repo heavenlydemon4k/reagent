@@ -50,7 +50,7 @@ class ChatService:
         # Add system message
         sys_msg = self.sessions.add_message(
             session.id, "agent",
-            "Session started. I'm here to help with your inbox. Ask me anything or say 'start stack' to work through critical emails.",
+            "Session started. I am here to help with your inbox. Ask me anything or say start stack to work through critical emails.",
             message_type="system"
         )
         await self._persist_message(session.id, "agent", sys_msg["content"], "system")

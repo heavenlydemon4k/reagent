@@ -33,7 +33,6 @@ class IntelligenceNatsConsumer:
 
     async def subscribe(self):
         """Subscribe to email.classified topic."""
-        # Ensure stream exists (idempotent)
         try:
             await self.js.add_stream(
                 name="EMAIL_CLASSIFIED",
@@ -42,7 +41,7 @@ class IntelligenceNatsConsumer:
                 max_bytes=-1,
             )
         except nats.js.errors.BadRequestError:
-            pass  # Stream already exists
+            pass
 
         config = ConsumerConfig(
             durable_name="intelligence-classified-consumer",
@@ -70,7 +69,6 @@ class IntelligenceNatsConsumer:
                 await msg.ack()
                 return
 
-            # Build EmailContext from payload
             email = EmailContext(
                 email_id=email_id,
                 subject=data.get("subject", ""),

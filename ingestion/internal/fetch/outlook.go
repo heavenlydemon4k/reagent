@@ -150,7 +150,7 @@ func (f *OutlookAPIFetcher) deltaQueryInternal(ctx context.Context, accessToken,
 
 	// Handle non-2xx status codes before attempting to parse body
 	if resp.StatusCode != http.StatusOK {
-		return f.handleErrorResponse(resp, deltaLink)
+		return f.handleErrorResponse(resp, deltaLink), nil
 	}
 
 	// Parse the JSON response

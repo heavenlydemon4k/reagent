@@ -56,29 +56,27 @@ export function useWebSocket(token: string) {
       }
 
       if (data.type === 'message' || data.type === 'card') {
-        // Remove any optimistic temp message with same content pattern
-        if (data.message?.role === 'agent') {
-          // Agent response arrived
+        if (data.message) {
           addMessage(sid, {
             id: data.message.id || crypto.randomUUID(),
-            sender_type: 'agent',
-            message_type: data.message.type || 'text',
-            content_text: data.message.content || '',
-            card_payload: data.message.card || null,
-            created_at: new Date().toISOString(),
+            sender_type: data.message.sender_type || 'agent',
+            message_type: data.message.message_type || 'text',
+            content_text: data.message.content_text || '',
+            card_payload: data.message.card_payload || null,
+            created_at: data.message.created_at || new Date().toISOString(),
           })
         }
       }
 
       if (data.type === 'card_action_result') {
-        if (data.card_payload) {
+        if (data.message) {
           addMessage(sid, {
-            id: crypto.randomUUID(),
+            id: data.message.id || crypto.randomUUID(),
             sender_type: 'agent',
-            message_type: 'card',
-            content_text: data.card_payload.title || '',
-            card_payload: data.card_payload,
-            created_at: new Date().toISOString(),
+            message_type: data.message.message_type || 'card',
+            content_text: data.message.content_text || '',
+            card_payload: data.message.card_payload || null,
+            created_at: data.message.created_at || new Date().toISOString(),
           })
         }
         if (data.card_resolved) {

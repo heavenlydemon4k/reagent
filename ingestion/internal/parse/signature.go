@@ -1,3 +1,5 @@
+//go:build !windows && cgo
+
 // Package parse transforms raw MIME email into structured ParsedEmail.
 // This file handles signature detection using an ONNX classifier and
 // fallback regex-based stripping when the model is unavailable.

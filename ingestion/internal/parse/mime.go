@@ -402,7 +402,7 @@ func decodeHeader(header string) string {
 	if header == "" {
 		return ""
 	}
-	decoded, err := mime.WordDecoder.DecodeHeader(header)
+	decoded, err := (&mime.WordDecoder{}).DecodeHeader(header)
 	if err != nil {
 		return header
 	}

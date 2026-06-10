@@ -1,7 +1,7 @@
 """FastAPI entry point for the calendar service.
 
 Usage:
-    uvicorn app.main:app --host 0.0.0.0 --port 8003
+    uvicorn app.main:app --host 0.0.0.0 --port 8004
 
 Environment:
     DATABASE_URL          PostgreSQL connection string

@@ -1,13 +1,6 @@
-# ------------------------------------------------------------------------------
-# Reagent — Local Development Environment
-# ------------------------------------------------------------------------------
-
 version: "3.9"
 
 services:
-  # ---------------------------------------------------------------------------
-  # PostgreSQL 16
-  # ---------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
     container_name: reagent-postgres
@@ -28,9 +21,6 @@ services:
     networks:
       - reagent
 
-  # ---------------------------------------------------------------------------
-  # Redis 7
-  # ---------------------------------------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: reagent-redis
@@ -52,9 +42,6 @@ services:
     networks:
       - reagent
 
-  # ---------------------------------------------------------------------------
-  # Qdrant 1.8
-  # ---------------------------------------------------------------------------
   qdrant:
     image: qdrant/qdrant:v1.8.1
     container_name: reagent-qdrant
@@ -75,9 +62,6 @@ services:
     networks:
       - reagent
 
-  # ---------------------------------------------------------------------------
-  # Neo4j 5.x Community
-  # ---------------------------------------------------------------------------
   neo4j:
     image: neo4j:5.16-community
     container_name: reagent-neo4j
@@ -108,9 +92,6 @@ services:
     networks:
       - reagent
 
-  # ---------------------------------------------------------------------------
-  # NATS Server with JetStream
-  # ---------------------------------------------------------------------------
   nats:
     image: nats:2.10-alpine
     container_name: reagent-nats
@@ -136,9 +117,6 @@ services:
     networks:
       - reagent
 
-  # ---------------------------------------------------------------------------
-  # NATS JetStream Setup
-  # ---------------------------------------------------------------------------
   nats-setup:
     image: natsio/nats-cli:0.1.4
     container_name: reagent-nats-setup
@@ -157,9 +135,6 @@ services:
       - reagent
     restart: "no"
 
-  # ---------------------------------------------------------------------------
-  # Qdrant Setup
-  # ---------------------------------------------------------------------------
   qdrant-setup:
     image: curlimages/curl:latest
     container_name: reagent-qdrant-setup
@@ -169,16 +144,13 @@ services:
     entrypoint: >
       /bin/sh -c '
       sleep 5 &&
-      curl -sfS -X PUT http://qdrant:6333/collections/emails -H "Content-Type: application/json" -d "{\"vectors\":{\"size\":1536,\"distance\":\"Cosine\",\"on_disk\":true},\"on_disk_payload\":true}" 2>/dev/null || true &&
+      curl -sfS -X PUT http://qdrant:6333/collections/emails -H "Content-Type: application/json" -d "{"vectors":{"size":1536,"distance":"Cosine","on_disk":true},"on_disk_payload":true}" 2>/dev/null || true &&
       echo "=== Qdrant collections created ==="
       '
     networks:
       - reagent
     restart: "no"
 
-  # ---------------------------------------------------------------------------
-  # Intelligence Service (Python)
-  # ---------------------------------------------------------------------------
   intelligence:
     build:
       context: ../../intelligence
@@ -210,9 +182,6 @@ services:
     networks:
       - reagent
 
-  # ---------------------------------------------------------------------------
-  # Client (React/Vite)
-  # ---------------------------------------------------------------------------
   client:
     build:
       context: ../../client
@@ -229,17 +198,11 @@ services:
     networks:
       - reagent
 
-# ---------------------------------------------------------------------------
-# Networks
-# ---------------------------------------------------------------------------
 networks:
   reagent:
     name: reagent
     driver: bridge
 
-# ---------------------------------------------------------------------------
-# Volumes
-# ---------------------------------------------------------------------------
 volumes:
   postgres_data:
   redis_data:
