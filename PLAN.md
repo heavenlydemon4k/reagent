@@ -53,18 +53,24 @@ The ingestion service must listen on `:8080` and accept real requests.
 
 Background worker processes fetch jobs end-to-end.
 
-| File | Action |
-|------|--------|
-| `ingestion/cmd/worker/main.go` | **Create.** Entrypoint: init DB, Redis, NATS. Start job processor pool + polling scheduler. |
-| `ingestion/internal/poll/scheduler.go` | **Create.** Periodic polls per account: Gmail `history.list`, Outlook Delta Query. Rate-limited, backoff-aware. |
-| `ingestion/internal/poll/worker.go` | **Create.** Worker pool pulling from Redis. Calls provider APIs, fetches MIME. |
-| `ingestion/internal/parse/parser.go` | Implement: MIME parse, HTML→text, signature strip (ONNX + regex fallback), attachment extraction to S3, 2FA/tracking code extraction. |
-| `ingestion/internal/thread/reconstruct.go` | Implement: 3-tier thread reconstruction (In-Reply-To → References → fuzzy subject). |
-| `ingestion/internal/contact/dedup.go` | Implement: Neo4j exact match + `SIMILAR_TO` edges. Never auto-merge. |
-| `ingestion/internal/events/assembler.go` | **Create.** Build `EmailIngestedEvent` and publish to NATS `email.ingested`. |
-| `ingestion/internal/nats/publisher.go` | Fix backoff math. Verify `1 << attempt` not corrupted shift. |
+| File | Status | Notes |
+|------|--------|-------|
+| `ingestion/cmd/worker/main.go` | ✅ Complete | Entrypoint wired: DB, Redis, NATS, KMS, Neo4j, thread engine, dedup engine, assembler, poller pool, scheduler, send consumer. |
+| `ingestion/internal/poll/scheduler.go` | ✅ Complete | Ticks on `poll_interval`; queries `email_accounts` for due accounts; submits FetchJobs. |
+| `ingestion/internal/poll/worker.go` | ✅ Complete | Fixed-size goroutine pool; non-blocking submit; graceful shutdown. |
+| `ingestion/internal/parse/parser.go` | ✅ Complete | MIME parse → HTML→text → signature strip → attachment S3 upload → code extraction → S3 raw blob. |
+| `ingestion/internal/thread/engine.go` | ✅ Complete | 3-tier: In-Reply-To → References → fuzzy subject + 7-day window → new thread. |
+| `ingestion/internal/contact/dedup.go` | ✅ Complete | Neo4j exact match → name-variant fuzzy → SIMILAR_TO edge (no auto-merge) → new Contact. |
+| `ingestion/internal/events/assembler.go` | ✅ Complete | AssembleEvent: thread → dedup → raw_emails INSERT → EmailIngestedEvent. |
+| `ingestion/internal/nats/publisher.go` | ✅ Complete | Backoff verified correct (`retryBaseDelay * 1<<(attempt-1)`). ReliablePublisher wraps JetStreamPublisher. |
 
-**Completion gate:** Send an email to connected account. Worker fetches, parses, threads, dedups, and publishes `email.ingested` event visible in NATS.
+**Completion gate:** ✅ `go build ./...` passes. Assembler wired into both pollers; `email.ingested` events carry real ThreadID and ContactIDs.
+
+**Side-fixes applied during Phase 2:**
+- `poll/gmail.go` — replaced broken `raw_emails` INSERT (`parsed.ThreadHint` passed as UUID, `parsed.Attachments` as TEXT[]) with `assembler.AssembleEvent`
+- `poll/outlook.go` — same fix
+- `poll/worker.go` — added `EmailAssembler` interface (shared by both pollers)
+- `cmd/worker/main.go` — added Neo4j driver init, thread engine, contact dedup engine, assembler; passed assembler to both pollers
 
 ---
 

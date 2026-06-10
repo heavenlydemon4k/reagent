@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/decisionstack/ingestion/internal/config"
+	"github.com/decisionstack/ingestion/internal/contact"
 	"github.com/decisionstack/ingestion/internal/crypto"
 	"github.com/decisionstack/ingestion/internal/db"
+	eventspkg "github.com/decisionstack/ingestion/internal/events"
 	"github.com/decisionstack/ingestion/internal/fetch"
 	"github.com/decisionstack/ingestion/internal/logger"
 	"github.com/decisionstack/ingestion/internal/models"
@@ -23,8 +25,10 @@ import (
 	"github.com/decisionstack/ingestion/internal/poll"
 	"github.com/decisionstack/ingestion/internal/redis"
 	s3client "github.com/decisionstack/ingestion/internal/s3"
+	"github.com/decisionstack/ingestion/internal/thread"
 
 	"github.com/google/uuid"
+	neo4j "github.com/neo4j/neo4j-go-driver/v5/neo4j"
 )
 
 func main() {
@@ -95,10 +99,28 @@ func run() error {
 	// Initialize token crypto for OAuth token encryption/decryption
 	tokenCrypto := crypto.NewTokenCrypto(kmsClient)
 
-	// Initialize slog logger for poll package
+	// Initialize slog logger for poll package (before Neo4j so it can be passed in)
 	slogLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slogLevelFromString(cfg.LogLevel),
 	}))
+
+	// Initialize Neo4j for thread reconstruction and contact dedup
+	neo4jDriver, err := neo4j.NewDriverWithContext(
+		cfg.Neo4jURI,
+		neo4j.BasicAuth(cfg.Neo4jUser, cfg.Neo4jPassword, ""),
+	)
+	if err != nil {
+		log.Error(ctx, "failed to connect to Neo4j", "error", err)
+		return fmt.Errorf("init neo4j: %w", err)
+	}
+	defer neo4jDriver.Close(ctx)
+	log.Info(ctx, "neo4j connected")
+
+	// Initialize event assembler: thread engine + contact dedup + raw_emails insert
+	neo4jContactStore := contact.NewNeo4jStore(neo4jDriver)
+	dedupEngine := contact.NewDedupEngine(neo4jContactStore, slogLogger)
+	threadEngine := thread.NewEngine(database.Pool(), neo4jDriver, slogLogger)
+	assembler := eventspkg.NewAssembler(database.Pool(), threadEngine, dedupEngine, slogLogger)
 
 	// -------------------------------------------------------------------------
 	// Polling Worker Pool — Blocker #4
@@ -139,6 +161,7 @@ func run() error {
 		&tokenStoreAdapter{store: oauthTokenStore},
 		&mimeParserAdapter{parser: mimeParser},
 		natsPublisher,
+		assembler,
 		slogLogger,
 	)
 
@@ -149,6 +172,7 @@ func run() error {
 		&tokenStoreAdapter{store: oauthTokenStore},
 		&mimeParserAdapter{parser: mimeParser},
 		natsPublisher,
+		assembler,
 		cfg.MicrosoftClientID, // app ID for rate limiting
 		slogLogger,
 	)

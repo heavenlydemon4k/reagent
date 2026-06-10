@@ -2,7 +2,6 @@ package poll
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -122,6 +121,7 @@ type OutlookPoller struct {
 	tokens    TokenStore
 	parser    MIMEParser
 	publisher natsevents.Publisher
+	assembler EmailAssembler
 	appID     string // application ID for rate limit key
 	log       *slog.Logger
 
@@ -143,6 +143,7 @@ func NewOutlookPoller(
 	tokens TokenStore,
 	parser MIMEParser,
 	publisher natsevents.Publisher,
+	assembler EmailAssembler,
 	appID string,
 	log *slog.Logger,
 ) *OutlookPoller {
@@ -156,6 +157,7 @@ func NewOutlookPoller(
 		tokens:    tokens,
 		parser:    parser,
 		publisher: publisher,
+		assembler: assembler,
 		appID:     appID,
 		log:       log.With("component", "outlook_poller"),
 	}
@@ -485,74 +487,15 @@ func (p *OutlookPoller) processMessage(ctx context.Context, job FetchJob, access
 	// Convert Outlook message to ParsedEmail
 	parsed := p.convertToParsedEmail(msg, job.AccountID, job.UserID)
 
-	// Persist to raw_emails
-	now := time.Now().UTC()
+	// Assemble event: thread resolution + contact dedup + raw_emails persist
 	rawEmailID := uuid.New()
 
-	err := p.state.AtomicEmailCommit(
-		ctx,
-		// insertEmail function
-		func(tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `
-				INSERT INTO raw_emails (
-					id, thread_id, user_id, source_account_id, message_id,
-					in_reply_to, references, sender_email, sender_name,
-					recipient_emails, subject, body_text, body_html,
-					has_attachments, attachment_s3_uris, extracted_codes,
-					received_at, parsed_at, retention_until, classification,
-					deleted
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, false)
-				ON CONFLICT (source_account_id, message_id) DO NOTHING
-			`,
-				rawEmailID,
-				parsed.ThreadHint,
-				job.UserID,
-				job.AccountID,
-				parsed.MessageID,
-				parsed.InReplyTo,
-				parsed.References,
-				parsed.SenderEmail,
-				parsed.SenderName,
-				parsed.RecipientEmails,
-				parsed.Subject,
-				parsed.BodyText,
-				parsed.BodyHTML,
-				parsed.HasAttachments,
-				parsed.Attachments,
-				parsed.ExtractedCodes,
-				parsed.ReceivedAt,
-				now,
-				now.Add(30 * 24 * time.Hour),
-				"pending",
-			)
-			return err
-		},
-		// updateState function (delta_link updated after all messages)
-		func(tx *sql.Tx) error {
-			return nil
-		},
-	)
+	event, err := p.assembler.AssembleEvent(ctx, parsed, rawEmailID, parsed.S3URI)
 	if err != nil {
-		return fmt.Errorf("persist email %s: %w", msg.ID, err)
+		return fmt.Errorf("assemble event for %s: %w", msg.ID, err)
 	}
 
-	// Publish email.ingested event
-	event := natsevents.EmailIngestedEvent{
-		EventID:            uuid.New(),
-		UserID:             job.UserID,
-		Source:             "outlook",
-		AccountID:          job.AccountID,
-		ThreadID:           uuid.Nil,
-		RawEmailID:         rawEmailID,
-		S3URI:              parsed.S3URI,
-		HasAttachments:     parsed.HasAttachments,
-		SenderEmail:        parsed.SenderEmail,
-		ReceivedAt:         parsed.ReceivedAt,
-		ClassificationHint: "pending",
-		ContactIDs:         nil,
-	}
-
-	if err := p.publisher.PublishEmailIngested(ctx, event); err != nil {
+	if err := p.publisher.PublishEmailIngested(ctx, *event); err != nil {
 		log.Error("failed to publish email.ingested event", "error", err)
 	}
 

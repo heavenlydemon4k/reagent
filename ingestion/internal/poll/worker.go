@@ -10,8 +10,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/decisionstack/ingestion/internal/models"
+	natsevents "github.com/decisionstack/ingestion/internal/nats"
 	"github.com/google/uuid"
 )
+
+// EmailAssembler orchestrates thread resolution, contact dedup, and
+// raw_emails persistence for a single parsed email.
+// Production: events.Assembler. Testing: mock.
+type EmailAssembler interface {
+	AssembleEvent(ctx context.Context, email *models.ParsedEmail, rawEmailID uuid.UUID, s3URI string) (*natsevents.EmailIngestedEvent, error)
+}
 
 // FetchJob represents a single unit of work: poll one email account.
 type FetchJob struct {

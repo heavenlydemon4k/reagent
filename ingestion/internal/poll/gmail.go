@@ -2,7 +2,6 @@ package poll
 
 import (
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"fmt"
 	"log/slog"
@@ -125,6 +124,7 @@ type GmailPoller struct {
 	tokens    TokenStore
 	parser    MIMEParser
 	publisher natsevents.Publisher
+	assembler EmailAssembler
 	log       *slog.Logger
 
 	// consecutiveGapCount tracks how many consecutive poll cycles detected
@@ -141,6 +141,7 @@ func NewGmailPoller(
 	tokens TokenStore,
 	parser MIMEParser,
 	publisher natsevents.Publisher,
+	assembler EmailAssembler,
 	log *slog.Logger,
 ) *GmailPoller {
 	return &GmailPoller{
@@ -150,6 +151,7 @@ func NewGmailPoller(
 		tokens:    tokens,
 		parser:    parser,
 		publisher: publisher,
+		assembler: assembler,
 		log:       log.With("component", "gmail_poller"),
 	}
 }
@@ -468,74 +470,15 @@ func (p *GmailPoller) processAddedMessage(ctx context.Context, job FetchJob, acc
 		return fmt.Errorf("parse MIME for %s: %w", added.MessageID, err)
 	}
 
-	// Persist raw email + update state atomically
-	now := time.Now().UTC()
+	// Assemble event: thread resolution + contact dedup + raw_emails persist
 	rawEmailID := uuid.New()
 
-	err = p.state.AtomicEmailCommit(
-		ctx,
-		// insertEmail function
-		func(tx *sql.Tx) error {
-			_, err := tx.ExecContext(ctx, `
-				INSERT INTO raw_emails (
-					id, thread_id, user_id, source_account_id, message_id,
-					in_reply_to, references, sender_email, sender_name,
-					recipient_emails, subject, body_text, body_html,
-					has_attachments, attachment_s3_uris, extracted_codes,
-					received_at, parsed_at, retention_until, classification,
-					deleted
-				) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, false)
-				ON CONFLICT (source_account_id, message_id) DO NOTHING
-			`,
-				rawEmailID,
-				parsed.ThreadHint, // use thread hint or generate
-				job.UserID,
-				job.AccountID,
-				parsed.MessageID,
-				parsed.InReplyTo,
-				parsed.References,
-				parsed.SenderEmail,
-				parsed.SenderName,
-				parsed.RecipientEmails,
-				parsed.Subject,
-				parsed.BodyText,
-				parsed.BodyHTML,
-				parsed.HasAttachments,
-				parsed.Attachments,
-				parsed.ExtractedCodes,
-				parsed.ReceivedAt,
-				now,
-				now.Add(30 * 24 * time.Hour), // 30-day retention
-				"pending",
-			)
-			return err
-		},
-		// updateState function (no-op here; history_id updated after all messages)
-		func(tx *sql.Tx) error {
-			return nil
-		},
-	)
+	event, err := p.assembler.AssembleEvent(ctx, parsed, rawEmailID, parsed.S3URI)
 	if err != nil {
-		return fmt.Errorf("persist email %s: %w", added.MessageID, err)
+		return fmt.Errorf("assemble event for %s: %w", added.MessageID, err)
 	}
 
-	// Publish email.ingested event
-	event := natsevents.EmailIngestedEvent{
-		EventID:            uuid.New(),
-		UserID:             job.UserID,
-		Source:             "gmail",
-		AccountID:          job.AccountID,
-		ThreadID:           uuid.Nil, // set by threading engine
-		RawEmailID:         rawEmailID,
-		S3URI:              parsed.S3URI,
-		HasAttachments:     parsed.HasAttachments,
-		SenderEmail:        parsed.SenderEmail,
-		ReceivedAt:         parsed.ReceivedAt,
-		ClassificationHint: "pending",
-		ContactIDs:         nil, // set by dedup engine
-	}
-
-	if err := p.publisher.PublishEmailIngested(ctx, event); err != nil {
+	if err := p.publisher.PublishEmailIngested(ctx, *event); err != nil {
 		// Log but don't fail — the email is persisted, event can be replayed
 		log.Error("failed to publish email.ingested event", "error", err)
 	}

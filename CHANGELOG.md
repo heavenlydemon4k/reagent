@@ -8,7 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### In Progress
-- Phase 2: Ingestion Worker (poll scheduler, MIME parse, thread reconstruction, NATS publish)
+- Phase 3: Classification service (consume `email.ingested`, route to `auto`/`stack`/`notify`)
+
+---
+
+## [0.3.0] — 2026-06-10 — Phase 2: Ingestion Worker
+
+### Added
+- **`ingestion/internal/poll/worker.go`** — `EmailAssembler` interface shared by both pollers.
+- **`ingestion/cmd/worker/main.go`** — Neo4j driver init, thread engine, contact dedup engine, `events.Assembler` instantiation, all wired into poller constructors.
+
+### Fixed
+- **`ingestion/internal/poll/gmail.go`** — `processAddedMessage` was passing `parsed.ThreadHint` (`*models.ThreadHint`) as `thread_id UUID` (runtime type error) and `parsed.Attachments` (`[]models.Attachment`) as `attachment_s3_uris TEXT[]`. Replaced the entire broken INSERT block with a call to `assembler.AssembleEvent`, which performs proper thread resolution, contact dedup, and persistence.
+- **`ingestion/internal/poll/outlook.go`** — Same fix as gmail.go: `processMessage` had the identical broken insert pattern. Replaced with assembler call.
+- Both pollers now emit `email.ingested` events with real `ThreadID` (from thread engine) and `ContactIDs` (from dedup engine) instead of `uuid.Nil` / `nil`.
 
 ---
 
