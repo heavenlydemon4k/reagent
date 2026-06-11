@@ -11,7 +11,7 @@ import {
   queueCardDecision,
 } from '@services/db';
 import { fetchBatch } from '@services/api';
-import type { DecisionCard, CardState } from '@types/cards';
+import type { DecisionCard, CardState } from '../types/cards';
 
 export interface UseCardsReturn {
   // State

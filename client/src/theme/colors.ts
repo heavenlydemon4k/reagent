@@ -182,4 +182,4 @@ export const darkTheme = {
   disabledText: palette.ink[600],
 } as const;
 
-export type ThemeColors = typeof lightTheme;
+export type ThemeColors = typeof lightTheme | typeof darkTheme;

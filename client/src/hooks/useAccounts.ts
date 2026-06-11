@@ -14,7 +14,7 @@ import {
   getAllAccounts,
   deleteAccount,
 } from '@services/accountDb';
-import type { EmailAccount } from '@types/cards';
+import type { EmailAccount } from '../types/cards';
 
 export interface UseAccountsReturn {
   // State

@@ -12,7 +12,7 @@ import type {
   CalendarEvent,
   FreeBusyResponse,
   CalendarEventCreate,
-} from '@types/cards';
+} from '../types/cards';
 
 export type SuggestedAction = 'clear_batch' | 'view_card' | 'schedule' | 'none';
 

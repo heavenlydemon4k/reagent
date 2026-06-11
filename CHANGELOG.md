@@ -8,7 +8,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### In Progress
-- Phase 6: Client (React) — TypeScript components, WebSocket integration
+- Phase 8: Integration & End-to-End Verification
+
+---
+
+## [0.8.0] — 2026-06-11 — Phase 6: Client TypeScript compile-clean
+
+### Fixed (Client — `tsc --noEmit` now passes with 0 errors)
+- Installed `react-native-web` + navigation + Expo packages; aliased `react-native` → `react-native-web` in Vite
+- Added `src/declarations.d.ts` — module stubs for all native packages unavailable on web
+- Added `src/vite-env.d.ts` and `tsconfig.json` path aliases for all `@theme`, `@hooks`, etc. imports
+- Fixed `@types/cards` reserved-namespace import across 17 files → relative paths
+- Added all missing API exports (`api.ts`): accounts, batch, calendar, contacts, decisions, onboarding
+- Added missing DB export `queueCardDecision` to `services/db.ts`
+- Fixed `ThemeColors` union type (`typeof lightTheme | typeof darkTheme`)
+- Added `bodyLarge` to `cardStyles.Type`; added spacing keys 0.75/4.5/5.5/13; added `fontWeight.light`
+- Added `isHydrated` to `UIStore` interface and initial state
+- Fixed `CardStackScreen` temporal dead zone for `showHelp`
+- Fixed `ContactProfileScreen` missing import and missing `styles.container`
+- Replaced `process.env.*` with `import.meta.env.*` in 3 service files
 
 ---
 

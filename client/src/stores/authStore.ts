@@ -4,7 +4,7 @@
 
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { AuthTokens, SecurityStatus, EmailAccount } from '@types/cards';
+import type { AuthTokens, SecurityStatus, EmailAccount } from '../types/cards';
 
 const STORAGE_KEYS = {
   tokens: 'ds_auth_tokens',

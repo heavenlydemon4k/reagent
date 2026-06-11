@@ -10,7 +10,7 @@ import { generateDeviceId } from '@services/crypto';
 import { registerBackgroundSync, unregisterBackgroundSync } from '@services/sync';
 import { setupNotifications, registerPushTokenWithServer } from '@services/notifications';
 import { api } from '@services/api';
-import type { AuthTokens } from '@types/cards';
+import type { AuthTokens } from '../types/cards';
 
 // Token refresh buffer — refresh when within 5 min of expiry
 const TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;

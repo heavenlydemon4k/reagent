@@ -2,7 +2,7 @@
 // Manages the one-card-at-a-time queue: pending, current, history
 
 import { create } from 'zustand';
-import type { DecisionCard, CardState } from '@types/cards';
+import type { DecisionCard, CardState } from '../types/cards';
 
 export interface CardStore {
   // ── State ──────────────────────────────────────────────────────

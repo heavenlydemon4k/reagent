@@ -12,7 +12,7 @@ import {
 import { palette } from '@theme/colors';
 import { fontSize, fontWeight } from '@theme/typography';
 import { spacing } from '@theme/spacing';
-import type { ChatResponse } from '@types/cards';
+import type { ChatResponse } from '../../types/cards';
 
 export type SuggestedActionType = NonNullable<ChatResponse['suggested_action']>;
 

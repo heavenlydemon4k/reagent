@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { palette } from '@theme/colors';
 import { spacing } from '@theme/spacing';
-import type { ChatMessage, ChunkCitation } from '@types/cards';
+import type { ChatMessage, ChunkCitation } from '../../types/cards';
 import { MessageBubble } from './MessageBubble';
 
 interface MessageListProps {

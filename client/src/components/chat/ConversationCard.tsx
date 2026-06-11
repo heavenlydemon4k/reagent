@@ -9,11 +9,12 @@ import {
   StyleSheet,
   Animated,
 } from 'react-native';
-import { Swipeable } from 'react-native-gesture-handler';
+import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+const Swipeable = ReanimatedSwipeable;
 import { palette } from '@theme/colors';
 import { fontSize, fontWeight, lineHeight } from '@theme/typography';
 import { spacing } from '@theme/spacing';
-import type { ConversationListItem } from '@types/cards';
+import type { ConversationListItem } from '../../types/cards';
 
 interface ConversationCardProps {
   conversation: ConversationListItem;

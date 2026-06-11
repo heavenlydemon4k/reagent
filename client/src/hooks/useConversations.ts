@@ -3,7 +3,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { api } from '@services/api';
-import type { ConversationListItem, Conversation } from '@types/cards';
+import type { ConversationListItem, Conversation } from '../types/cards';
 
 export interface UseConversationsReturn {
   conversations: ConversationListItem[];

@@ -28,8 +28,8 @@ import { syncQueue } from "./syncQueue";
 // Configuration
 // ---------------------------------------------------------------------------
 
-const SYNC_ENDPOINT = `${process.env.EXPO_PUBLIC_API_URL ?? "https://api.decisionstack.io"}/sync`;
-const BATCH_ENDPOINT = `${process.env.EXPO_PUBLIC_API_URL ?? "https://api.decisionstack.io"}/batch`;
+const SYNC_ENDPOINT = `${import.meta.env.VITE_API_URL ?? "https://api.decisionstack.io"}/sync`;
+const BATCH_ENDPOINT = `${import.meta.env.VITE_API_URL ?? "https://api.decisionstack.io"}/batch`;
 
 // ---------------------------------------------------------------------------
 // Types

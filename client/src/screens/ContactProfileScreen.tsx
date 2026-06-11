@@ -37,7 +37,7 @@ import { ContactTimeline } from "../components/contact/ContactTimeline";
 import { palette } from "../theme/colors";
 import { fontSize, fontWeight } from "../theme/typography";
 import { spacing } from "../theme/spacing";
-import type { ContactProfileRouteParams } from "../types/contact";
+import type { ContactProfileRouteParams, ContactProfile } from "../types/contact";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -741,6 +741,9 @@ export const ContactProfileScreen: React.FC<ContactProfileScreenProps> = ({
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   screen: {
     flex: 1,
   },

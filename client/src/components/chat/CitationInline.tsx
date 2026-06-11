@@ -11,7 +11,7 @@ import {
 import { palette } from '@theme/colors';
 import { fontSize, fontWeight } from '@theme/typography';
 import { spacing } from '@theme/spacing';
-import type { ChunkCitation } from '@types/cards';
+import type { ChunkCitation } from '../../types/cards';
 
 interface CitationInlineProps {
   citations: ChunkCitation[];

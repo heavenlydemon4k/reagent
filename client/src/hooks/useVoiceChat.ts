@@ -6,7 +6,7 @@ import { Audio } from 'expo-av';
 
 // ── Deepgram Configuration ──────────────────────────────────────────────────
 // Pull from environment or fallback to placeholder (must be set at build time)
-const DEEPGRAM_API_KEY = process.env.DEEPGRAM_API_KEY ?? '';
+const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY ?? '';
 const DEEPGRAM_WS_URL = 'wss://api.deepgram.com/v1/listen';
 
 export type VoicePhase = 'idle' | 'recording' | 'processing' | 'playing' | 'error';

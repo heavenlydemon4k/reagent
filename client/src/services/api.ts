@@ -202,3 +202,72 @@ export async function getPreferences(): Promise<{
   const response = await api.get('/profile/me/preferences')
   return response.data
 }
+
+import type {
+  EmailAccount,
+  CalendarEvent,
+  FreeBusyResponse,
+  CalendarEventCreate,
+} from '../types/cards'
+import type { ContactProfile, ThreadSummary } from '../types/contact'
+
+// Account management
+export async function getConnectedAccounts(): Promise<EmailAccount[]> {
+  const r = await api.get<EmailAccount[]>('/accounts')
+  return r.data
+}
+export async function initiateOAuth(provider: string): Promise<string> {
+  const r = await api.post<{ url: string }>('/accounts/oauth/init', { provider })
+  return r.data.url
+}
+export async function disconnectAccount(accountId: string): Promise<void> {
+  await api.delete(`/accounts/${accountId}`)
+}
+export async function setServerActiveAccount(accountId: string | null): Promise<void> {
+  await api.put('/accounts/active', { account_id: accountId })
+}
+
+// Card batch
+export async function fetchBatch(count: number): Promise<{ cards: import('../types/cards').DecisionCard[]; status: string }> {
+  const r = await api.get<{ cards: import('../types/cards').DecisionCard[]; status: string }>('/cards/batch', { params: { count } })
+  return r.data
+}
+
+// Calendar
+export async function getCalendarEvents(days?: number): Promise<CalendarEvent[]> {
+  const r = await api.get<CalendarEvent[]>('/calendar/events', { params: { days } })
+  return r.data
+}
+export async function checkFreeBusy(date: string): Promise<FreeBusyResponse> {
+  const r = await api.post<FreeBusyResponse>('/calendar/free-busy', { date })
+  return r.data
+}
+export async function createCalendarEvent(event: CalendarEventCreate): Promise<CalendarEvent> {
+  const r = await api.post<CalendarEvent>('/calendar/events', event)
+  return r.data
+}
+export async function sendDraft(draftId: string): Promise<{ status: string }> {
+  const r = await api.post<{ status: string }>(`/drafts/${draftId}/send`)
+  return r.data
+}
+
+// Contacts
+export async function getContactProfile(contactId: string): Promise<ContactProfile> {
+  const r = await api.get<ContactProfile>(`/contacts/${contactId}`)
+  return r.data
+}
+export async function getContactTimeline(contactId: string, limit?: number): Promise<ThreadSummary[]> {
+  const r = await api.get<ThreadSummary[]>(`/contacts/${contactId}/timeline`, { params: { limit } })
+  return r.data
+}
+
+// Decisions / drafting
+export async function submitDecision(payload: { card_id: string; decision: string; input?: string }): Promise<{ draft_id: string; draft_body: string; subject_line: string }> {
+  const r = await api.post<{ draft_id: string; draft_body: string; subject_line: string }>('/decisions', payload)
+  return r.data
+}
+
+// Onboarding
+export async function completeOnboarding(): Promise<void> {
+  await api.post('/onboarding/complete')
+}

@@ -5,7 +5,7 @@ import { useAuthStore } from '@stores/authStore';
 import { useSyncStore } from '@stores/syncStore';
 
 const WS_BASE_URL =
-  process.env.EXPO_PUBLIC_WS_URL ?? 'wss://ws.decisionstack.app/v1';
+  import.meta.env.VITE_WS_URL ?? 'wss://ws.decisionstack.app/v1';
 
 export type WebSocketStatus = 'connecting' | 'open' | 'closing' | 'closed' | 'error';
 
@@ -112,7 +112,7 @@ class WebSocketClient {
       // Flush pending messages
       while (this.pendingMessages.length > 0) {
         const msg = this.pendingMessages.shift();
-        if (msg) this.ws.send(msg);
+        if (msg && this.ws) this.ws.send(msg);
       }
 
       this.startPing();

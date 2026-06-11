@@ -4,7 +4,7 @@
 import { create } from 'zustand';
 import { Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import type { VoiceModeState, VoiceTranscription } from '@types/cards';
+import type { VoiceModeState, VoiceTranscription } from '../types/cards';
 
 type ThemeMode = 'light' | 'dark' | 'system';
 type ColorScheme = 'light' | 'dark';
@@ -33,6 +33,7 @@ export interface UIStore {
 
   // ── Onboarding ─────────────────────────────────────────────────
   hasCompletedOnboarding: boolean;
+  isHydrated: boolean;
 
   // ── Computed ───────────────────────────────────────────────────
   effectiveTheme: () => ColorScheme;
@@ -86,6 +87,7 @@ export const useUIStore = create<UIStore>((set, get) => ({
   toast: null,
 
   hasCompletedOnboarding: false,
+  isHydrated: false,
 
   // ── Computed ───────────────────────────────────────────────────
 

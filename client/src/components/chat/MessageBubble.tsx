@@ -11,7 +11,7 @@ import {
 import { palette } from '@theme/colors';
 import { fontSize, fontWeight, lineHeight } from '@theme/typography';
 import { spacing } from '@theme/spacing';
-import type { ChatMessage, ChunkCitation } from '@types/cards';
+import type { ChatMessage, ChunkCitation } from '../../types/cards';
 import { CitationInline } from './CitationInline';
 import { VoicePlayback } from '../voice/VoicePlayback';
 

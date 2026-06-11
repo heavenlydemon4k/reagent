@@ -53,6 +53,7 @@ export const Type = {
   title:      { fontSize: 22, fontWeight: "600" as const, letterSpacing: -0.3, lineHeight: 28 },
   subtitle:   { fontSize: 16, fontWeight: "500" as const, letterSpacing: 0,   lineHeight: 22 },
   body:       { fontSize: 15, fontWeight: "400" as const, letterSpacing: 0,   lineHeight: 21 },
+  bodyLarge:  { fontSize: 16, fontWeight: "400" as const, letterSpacing: 0,   lineHeight: 24 },
   bodyBold:   { fontSize: 15, fontWeight: "600" as const, letterSpacing: 0,   lineHeight: 21 },
   caption:    { fontSize: 13, fontWeight: "400" as const, letterSpacing: 0.2, lineHeight: 18 },
   captionBold:{ fontSize: 13, fontWeight: "600" as const, letterSpacing: 0.2, lineHeight: 18 },

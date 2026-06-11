@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useUIStore } from '@stores/uiStore';
 import { useCardStore } from '@stores/cardStore';
 import { wsClient } from '@services/websocket';
-import type { VoiceModeState, VoiceTranscription } from '@types/cards';
+import type { VoiceModeState, VoiceTranscription } from '../types/cards';
 
 const UNDO_WINDOW_MS = 5000;
 

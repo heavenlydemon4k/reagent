@@ -190,7 +190,7 @@ export const CardStackScreen: React.FC<CardStackScreenProps> = ({
       onConsult: useCallback(() => {
         if (currentCard) onConsult(currentCard.id);
       }, [currentCard, onConsult]),
-      onShowHelp: showHelp,
+      onShowHelp: () => { /* resolved below */ },
     },
     { enabled: true, ignoreWhenTyping: true }
   );

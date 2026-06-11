@@ -25,7 +25,7 @@ import { TranscriptionView } from '@components/voice/TranscriptionView';
 import { ThemeToggle } from '@components/common/ThemeToggle';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '@navigation/AppNavigator';
-import type { ChunkCitation, CalendarEvent, FreeBusyResponse } from '@types/cards';
+import type { ChunkCitation, CalendarEvent, FreeBusyResponse } from '../types/cards';
 import type { SlashCommand } from '@components/chat/ChatInput';
 
 type ChatScreenRouteProp = RouteProp<RootStackParamList, 'Chat'>;

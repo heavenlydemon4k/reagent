@@ -16,7 +16,7 @@ import type {
   Draft,
   SyncQueueItem,
   CardState,
-} from '@types/cards';
+} from '../types/cards';
 
 const DB_NAME = 'decisionstack';
 let dbInstance: DB | null = null;
@@ -732,4 +732,8 @@ export function getDatabaseStats(): {
     drafts: (drafts.rows?.[0] as { c: number })?.c ?? 0,
     syncQueue: (syncQ.rows?.[0] as { c: number })?.c ?? 0,
   };
+}
+
+export function queueCardDecision(cardId: string, sequence: number, status: string, input?: string): void {
+  enqueueOperation('card_decision', cardId, { sequence, status, input });
 }

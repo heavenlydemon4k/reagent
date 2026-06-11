@@ -3,7 +3,7 @@
 // Mirrors AsyncStorage state into SQLCipher for durability.
 
 import { getDB } from './db';
-import type { EmailAccount } from '@types/cards';
+import type { EmailAccount } from '../types/cards';
 
 // ============================================================================
 // SCHEMA (part of db.ts migrations — Migration 1 adds this table)
