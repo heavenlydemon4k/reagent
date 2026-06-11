@@ -57,7 +57,7 @@ Reagent is an AI-native email agent. It ingests email from Gmail/Outlook, classi
 - `id`, `email`, `hashed_password`, `name`, `avatar_url`, `created_at`
 
 ### Profiles
-- `user_id`, `agent_name`, `agent_tone`, `system_prompt_suffix`, `preferences_json`, `updated_at`
+- `user_id`, `preferences_json`, `updated_at`
 
 ### Sessions
 - `id`, `user_id`, `title`, `status` (active/paused/completed), `stack_position`, `created_at`, `updated_at`, `last_message_at`
@@ -117,21 +117,24 @@ Connect to `/ws` with Bearer token.
 
 ## Agent Behavior
 
-### System Prompt Template
-```
-You are {agent_name}. Tone: {agent_tone}. {system_prompt_suffix}.
+**Design decision: no agent personality.** The system prompt contains no name, tone, or greeting. The agent is a tool, not a companion. `agent_name` and `agent_tone` do not exist anywhere in the codebase.
 
-You have access to the user's email knowledgebase. You can:
+### System Prompt (neutral)
+```
+You are an email agent. You have access to the user's email knowledgebase. You can:
 - Answer questions about their inbox.
 - Organize emails autonomously (label, archive, draft routine replies).
 - Present critical emails as decision cards when the user is in a session.
 - Draft responses for user approval before sending.
 
 When referencing an email, always include the source_email_id.
-When the user makes a decision on a card, draft the response and present it as a preview card with [Send] and [Edit] actions.
+When the user makes a decision on a card, draft the response and present it for review before sending.
 ```
 
-### Card Generation (LLM → JSON)
+### Card Generation (LLM → conversational, not button-driven)
+
+**Design decision: cards output a `question` string, not an `options` array.** The user's typed or spoken response is the decision mechanism. No button labels, no action IDs.
+
 ```json
 {
   "type": "card",
@@ -139,30 +142,22 @@ When the user makes a decision on a card, draft the response and present it as a
   "title": "Budget approval needed",
   "body": "Sarah from Finance is asking for Q3 budget sign-off by Friday.",
   "source_email_id": "uuid",
-  "options": [
-    {"id": "approve", "label": "Approve", "style": "primary"},
-    {"id": "request_info", "label": "Request More Info", "style": "default"},
-    {"id": "delegate", "label": "Delegate to Tom", "style": "default"},
-    {"id": "snooze", "label": "Snooze 24h", "style": "default"}
-  ]
+  "question": "Do you want to approve, request more information, delegate this, or snooze it?"
 }
 ```
 
-### Preview Card (after decision)
+### Preview Card (after user provides their decision via chat)
 ```json
 {
   "type": "card",
   "card_type": "confirm",
   "title": "Draft Reply to Sarah",
   "body": "Hi Sarah, I've reviewed the Q3 budget and approve the figures. Let me know if you need anything else.",
-  "source_email_id": "uuid",
-  "options": [
-    {"id": "send", "label": "Send", "style": "primary"},
-    {"id": "edit", "label": "Edit", "style": "default"},
-    {"id": "discard", "label": "Discard", "style": "danger"}
-  ]
+  "source_email_id": "uuid"
 }
 ```
+
+The preview card carries [Send] and [Edit] actions in the client UI. No action IDs or option arrays in the payload — the client renders the standard approval controls.
 
 ## Security Invariants
 

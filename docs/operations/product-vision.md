@@ -17,7 +17,7 @@ Reagent turns the inbox into a conversation. The agent is a persistent teammate 
 The user opens the app and sees the chat. The input bar is always there. There is no "switch to chat mode" — chat *is* the mode.
 
 ### 2. Cards are Messages
-Decision cards are not modals or popups. They are rich message bubbles in the chat stream. The user interacts with them via buttons inline. Resolved cards collapse or gray out.
+Decision cards are not modals or popups. They are rich message bubbles in the chat stream. Each card presents context and a single question. The user replies in the chat input — their text or voice response is the decision. No button arrays. Resolved cards collapse or gray out.
 
 ### 3. Sessions are Real
 A decision stack session is a real chat session. It has a title, start time, and history. The user can say "pause" and resume later. The agent remembers where they left off.
@@ -35,10 +35,11 @@ The traditional inbox view exists but is secondary. It's for browsing, searching
 
 ### Morning Stack
 1. User opens app at 9am.
-2. Agent: "Good morning. You have 4 critical emails in your stack. Ready to work through them?"
-3. User: "Let's go."
-4. Card 1 appears. User decides. Preview appears. User approves. Send.
-5. Card 2 appears. Continue until done or user says "pause."
+2. Batch gate shows: "4 decisions · ~8 min · Start Clearing?"
+3. User taps Start.
+4. Card 1 appears with context and a question. User types or speaks their decision.
+5. Draft preview appears. User approves. Send.
+6. Card 2 appears automatically. Continue until stack is empty or user exits.
 
 ### Ad-hoc Query
 1. User is in chat: "Did anyone reply about the server migration?"

@@ -1,10 +1,17 @@
-# Decision Stack — Master State Document
+# Reagent — Master State Document
 
 > Version: 2.0
 > Date: 2026-06-06
-> Status: SYSTEM COMPLETE — All invariants verified, all send pipeline gaps closed
-> Codebase: 599 files, 130,000+ lines, 9 bounded contexts, 12 services
+> Status: **HISTORICAL AUDIT RECORD** — accurate as of the audit session that produced it
+> Codebase snapshot: 599 files, 130,000+ lines, 9 bounded contexts, 12 services
 > Remediation: 6 turns, 29+ agents, 50+ files modified, 4,701 lines of tests + docs
+
+> **Note for readers (updated 2026-06-11):** This document is a deep architectural audit record. Several details have since changed:
+> - Service paths: `intelligence/intelligence/app/...` references are stale. The intelligence service is at `intelligence/app/`.
+> - Agent personality: `agent_name`, `agent_tone` have been removed from all code and the data model. The system prompt is neutral.
+> - Card format: button-driven `options[]` arrays have been replaced with a single `question` string per the "conversational cards" design decision.
+> - Branding: The project is "Reagent", not "Decision Stack".
+> - For current state, see [PLAN.md](../../PLAN.md), [CHANGELOG.md](../../CHANGELOG.md), and [master-state.md](master-state.md).
 
 ---
 
