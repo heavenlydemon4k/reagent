@@ -57,8 +57,7 @@ Return ONLY the draft text. No JSON, no markdown, no explanation."""
         draft_text = response.text.strip()
         subject = email.subject
         if draft_text.startswith("Subject:"):
-            parts = draft_text.split("
-", 1)
+            parts = draft_text.split("\n", 1)
             subject = parts[0].replace("Subject:", "").strip()
             draft_text = parts[1].strip() if len(parts) > 1 else draft_text
 
@@ -118,8 +117,7 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
         draft_text = response.text.strip()
         subject = ""
         if draft_text.startswith("Subject:"):
-            parts = draft_text.split("
-", 1)
+            parts = draft_text.split("\n", 1)
             subject = parts[0].replace("Subject:", "").strip()
             draft_text = parts[1].strip() if len(parts) > 1 else draft_text
 
@@ -146,8 +144,7 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
                 resp = await client.post(
                     f"{ingestion_url}/api/v1/send",
                     json={
-                        "to": decision.draft_text.split("
-")[0] if decision.draft_text else "",
+                        "to": decision.draft_text.split("\n")[0] if decision.draft_text else "",
                         "subject": "Re: " + (decision.draft_text[:50] if decision.draft_text else ""),
                         "body": decision.draft_text,
                         "draft_id": str(draft_id),

@@ -127,16 +127,12 @@ class EmailKnowledgeBase:
     def summarize_for_agent(self, contexts: List[EmailContext]) -> str:
         lines = []
         for ctx in contexts:
-            snippet = ctx.body_text[:500].replace("
-", " ")
+            snippet = ctx.body_text[:500].replace("\n", " ")
             lines.append(
                 f"[Email {ctx.email_id}] From: {ctx.from_address} | Subject: {ctx.subject} | "
-                f"Date: {ctx.received_at}
-{snippet}"
+                f"Date: {ctx.received_at}\n{snippet}"
             )
-        return "
-
-".join(lines)
+        return "\n".join(lines)
 
     def _embed(self, text: str) -> List[float]:
         """Real OpenAI embedding via text-embedding-3-small."""

@@ -8,7 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### In Progress
-- Phase 5: Intelligence service (consume `email.classified`, generate cards, chat, drafts)
+- Phase 6: Client (React) — TypeScript components, WebSocket integration
+
+---
+
+## [0.7.0] — 2026-06-11 — Phase 5 + 7: Intelligence and Peripheral Services compile-clean
+
+### Fixed (Intelligence — all `*.py` pass `python -m py_compile`)
+- `app/agent/orchestrator.py` — 3 embedded bare-newline bytes inside string literals replaced with proper `\n` escape sequences (scaffolding artifact: CRLF-encoded files had literal newline bytes inside `"…"` string arguments)
+- `app/decision_stack/service.py` — 1 bare-LF inside `.split("…")` argument
+- `app/drafting/service.py` — 3 bare-LF inside `.split("…")` arguments
+- `app/email_kb/service.py` — f-string continuation across bare newline (`f"Date: {ctx.received_at}\n{snippet}"`); double-bare-LF in `return "\n".join(lines)`
+
+### Fixed (Peripheral Services — no changes required)
+- `ocr`, `stt`, `tts`, `calendar` — all Python files passed syntax check without modification
 
 ---
 

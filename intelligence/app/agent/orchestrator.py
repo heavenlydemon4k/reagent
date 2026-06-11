@@ -82,8 +82,7 @@ class AgentOrchestrator:
             "",
             "Answer directly. Reference emails by ID. Include [Source: email_id] after each claim.",
         ]
-        prompt = "
-".join(lines)
+        prompt = "\n".join(lines)
         response = self.llm.route(prompt, complexity="complex")
         text = response.text.strip()
         source_ids = self._extract_source_ids(text)
@@ -139,8 +138,7 @@ class AgentOrchestrator:
     async def _handle_general_chat(self, user_id, session_id, content, session_manager):
         session = session_manager.get(session_id)
         history = session.messages[-10:] if session else []
-        history_str = "
-".join([m["role"] + ": " + m["content"] for m in history])
+        history_str = "\n".join([m["role"] + ": " + m["content"] for m in history])
         profile = self.profile.get_or_create(user_id) if self.profile else None
         suffix = profile.system_prompt_suffix if profile else ""
         lines = [
@@ -154,8 +152,7 @@ class AgentOrchestrator:
             "User: " + content,
             "Agent:",
         ]
-        prompt = "
-".join(lines)
+        prompt = "\n".join(lines)
         response = self.llm.route(prompt, complexity="auto")
         return self._agent_response(session_id, response.text.strip(), session_manager, cost=response.meter.total_cost_usd)
 

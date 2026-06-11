@@ -226,8 +226,7 @@ Only return valid JSON. No markdown, no explanation."""
                 resp = await client.post(
                     f"{ingestion_url}/api/v1/send",
                     json={
-                        "to": decision.draft_text.split("
-")[0] if decision.draft_text else "",
+                        "to": decision.draft_text.split("\n")[0] if decision.draft_text else "",
                         "subject": "Re: " + (decision.draft_text[:50] if decision.draft_text else ""),
                         "body": decision.draft_text,
                         "draft_id": str(decision.id),

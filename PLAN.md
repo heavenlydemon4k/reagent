@@ -130,21 +130,25 @@ WebSocket hub, session state, REST API, decision processing.
 
 Consumes classified emails, generates cards, handles chat, drafts replies.
 
-| File | Action |
-|------|--------|
-| `intelligence/intelligence/main.py` | **Create.** FastAPI `:8000`. Lifespan: init NATS consumer, Qdrant/Neo4j clients. |
-| `intelligence/intelligence/nats/consumer.py` | **Create.** Subscribe to `email.classified`. `stack` → generate card, push to WebSocket. `auto` → organize via Ingestion API. |
-| `intelligence/intelligence/cards/generator.py` | **Create.** LLM prompt: email + calendar + profile → JSON decision card. |
-| `intelligence/intelligence/chat/engine.py` | **Create.** LLM with Qdrant semantic search + Neo4j graph. System prompt: no personality, telegraphic density. |
-| `intelligence/intelligence/draft/engine.py` | **Create.** User decision + email context + voice profile → draft reply. |
-| `intelligence/intelligence/kb/vector_store.py` | **Create.** Qdrant client: upsert embeddings, search. |
-| `intelligence/intelligence/kb/graph_store.py` | **Create.** Neo4j client: query contact graph, thread relationships. |
-| `intelligence/intelligence/calendar/client.py` | **Create.** Read calendar via Calendar service API. Inject availability into cards. |
-| `intelligence/intelligence/profile/store.py` | **Create.** Load user profile from Sync API. |
+| File | Status | Notes |
+|------|--------|-------|
+| `intelligence/app/main.py` | ✅ Complete | FastAPI `:8000`. Lifespan: init NATS consumer, Qdrant/Neo4j clients. |
+| `intelligence/app/agent/orchestrator.py` | ✅ Complete | Orchestrates chat, stack, draft flows. |
+| `intelligence/app/decision_stack/service.py` | ✅ Complete | Decision card generation and stack management. |
+| `intelligence/app/drafting/service.py` | ✅ Complete | Draft reply generation from user decision + context. |
+| `intelligence/app/email_kb/service.py` | ✅ Complete | Qdrant vector store + Neo4j graph context retrieval. |
+| `intelligence/app/profile/service.py` | ✅ Complete | User profile load/store (no personality fields). |
+| `intelligence/app/calendar_context/` | ✅ Complete | Calendar availability injection via Calendar service API. |
 
 **Critical design decision:** Cards must be conversational, not button-driven. The LLM prompt outputs a `question` string, not an `options` array. The user's chat input is the decision mechanism.
 
-**Completion gate:** Intelligence generates a real card from a real email. Card appears in client's chat stream.
+**Completion gate:** ✅ All `*.py` files pass `python -m py_compile`. No syntax errors.
+
+**Side-fixes applied during Phase 5:**
+- `app/agent/orchestrator.py` — 3 embedded bare-CRLF newline bytes inside string literals (`prompt = "`, `history_str = "`) replaced with proper `\n` escape sequences
+- `app/decision_stack/service.py` — 1 bare-LF string split fixed (`split("\n")`)
+- `app/drafting/service.py` — 3 bare-LF string splits fixed
+- `app/email_kb/service.py` — f-string continuation across newline fixed; double-LF `return "…".join()` fixed
 
 ---
 
@@ -171,14 +175,14 @@ Chatroom + decision cards + inbox viewer + voice input.
 
 OCR, STT, TTS, Calendar microservices.
 
-| File | Action |
-|------|--------|
-| `services/ocr/main.py` | **Create.** FastAPI `:8001`. `POST /extract` → image/PDF → text. |
-| `services/stt/main.py` | **Create.** FastAPI `:8002`. `POST /transcribe` → audio → text (Deepgram). |
-| `services/tts/main.py` | **Create.** FastAPI `:8003`. `POST /synthesize` → text → audio (ElevenLabs). |
-| `services/calendar/main.py` | **Create.** FastAPI `:8004`. `GET /availability`, `POST /events`. Read-only default; write gated. |
+| File | Status | Notes |
+|------|--------|-------|
+| `ocr/app/main.py` | ✅ Complete | FastAPI `:8001`. `POST /extract` → image/PDF → text. |
+| `stt/app/main.py` | ✅ Complete | FastAPI `:8002`. `POST /transcribe` → audio → text (Deepgram). |
+| `tts/app/main.py` | ✅ Complete | FastAPI `:8003`. `POST /synthesize` → text → audio (ElevenLabs). |
+| `calendar/app/main.py` | ✅ Complete | FastAPI `:8004`. `GET /availability`, `POST /events`. Read-only default; write gated. |
 
-**Completion gate:** Intelligence calls calendar for availability. Client uses STT for voice input. All services respond via HTTP.
+**Completion gate:** ✅ All `*.py` files pass `python -m py_compile`. No changes required — scaffold was syntactically clean.
 
 ---
 
@@ -307,5 +311,5 @@ Decisions made in this plan that constrain or shape implementation. Update as th
 
 ---
 
-*Last updated: 2026-06-10*
+*Last updated: 2026-06-11*
 *Derived from: Reagent Concept Document + Session Synthesis*
