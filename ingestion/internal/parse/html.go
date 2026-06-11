@@ -161,29 +161,23 @@ func postProcess(text string) string {
 	return text
 }
 
-// collapseSpaces collapses multiple consecutive spaces into a single space,
-// while preserving leading indentation (up to 8 spaces for list nesting).
+// collapseSpaces collapses any run of spaces/tabs into a single space.
+// Trailing whitespace is not emitted; leading whitespace emits one space if present.
 func collapseSpaces(s string) string {
 	var result strings.Builder
 	result.Grow(len(s))
-	inSpaces := false
-	spaceCount := 0
-	const maxIndentSpaces = 8
+	prevWasSpace := false
 
-	for _, r := range s {
+	for i, r := range s {
 		if r == ' ' || r == '\t' {
-			if !inSpaces {
-				inSpaces = true
-				spaceCount = 1
-			} else {
-				spaceCount++
-			}
-			if spaceCount <= maxIndentSpaces && result.Len() == spaceCount-1 {
-				result.WriteRune(' ')
+			if !prevWasSpace {
+				prevWasSpace = true
 			}
 		} else {
-			inSpaces = false
-			spaceCount = 0
+			if prevWasSpace && i > 0 {
+				result.WriteRune(' ')
+			}
+			prevWasSpace = false
 			result.WriteRune(r)
 		}
 	}

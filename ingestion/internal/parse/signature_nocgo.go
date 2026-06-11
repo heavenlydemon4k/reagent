@@ -158,7 +158,7 @@ func (sc *SignatureClassifier) containsSignatureSignals(text string) int {
 
 // preview returns a short preview for logging. Defined here to match signature.go.
 func preview(text string, maxLen int) string {
-	if len(text) <= maxLen {
+	if len(text) <= maxLen+3 {
 		return text
 	}
 	return text[:maxLen] + "..."

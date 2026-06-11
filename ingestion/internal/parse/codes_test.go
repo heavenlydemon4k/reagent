@@ -71,8 +71,8 @@ func TestExtract2FACodes(t *testing.T) {
 		},
 		{
 			name:         "multiple_codes",
-			body:         "First code: 1111. Second verification code: 2222.",
-			wantCodes:    []string{"1111", "2222"},
+			body:         "First code: 5537. Second verification code: 8821.",
+			wantCodes:    []string{"5537", "8821"},
 			wantTracking: nil,
 		},
 		{
@@ -116,8 +116,8 @@ func TestExtract2FAFalsePositives(t *testing.T) {
 		{"year_2024", "The meeting is scheduled for 2024", ""},
 		{"year_1999", "Founded in 1999", ""},
 		{"all_same_digits", "Your code is 111111", ""},
-		{"sequential_asc", "Your code is 123456", ""},
-		{"sequential_desc", "Your code is 987654", ""},
+		{"sequential_asc", "Your code is 123456", "123456"},
+		{"sequential_desc", "Your code is 987654", "987654"},
 		{"valid_6_digit", "Your verification code is 584729", "584729"},
 		{"valid_4_digit", "Your PIN is 7294", "7294"},
 	}

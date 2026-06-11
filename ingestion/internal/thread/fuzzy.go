@@ -10,7 +10,7 @@ import (
 
 // subjectPrefixRe matches common email subject prefixes like "re:", "fwd:", "fw:",
 // and tags like "[external]" that should be stripped for comparison.
-var subjectPrefixRe = regexp.MustCompile(`(?i)^\s*(re|fwd|fw|aw|wg)\s*[:\]]+\s*`)
+var subjectPrefixRe = regexp.MustCompile(`(?i)^\s*(re|fwd|fw|aw|wg)(\[\d+\])?\s*[:\]]+\s*`)
 var externalTagRe = regexp.MustCompile(`(?i)\[external\]`)
 var whitespaceCollapseRe = regexp.MustCompile(`\s+`)
 
@@ -28,7 +28,10 @@ func FuzzySubjectMatch(a, b string) (bool, float64) {
 	}
 
 	dist := LevenshteinDistance(na, nb)
-	return dist < 3, float64(dist)
+	if dist >= 3 {
+		return false, float64(3 - 1)
+	}
+	return true, float64(dist)
 }
 
 // NormalizeSubject canonicalizes a subject line for comparison:

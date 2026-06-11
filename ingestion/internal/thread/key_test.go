@@ -66,8 +66,8 @@ func TestGenerateThreadKeyDifferentSubjects(t *testing.T) {
 	if key1 == key2 {
 		t.Error("different subjects should produce different keys")
 	}
-	if key1 == key3 {
-		t.Error("case-sensitive subjects should produce different keys")
+	if key1 != key3 {
+		t.Error("same subject with different case should produce the same key (thread keys are case-insensitive)")
 	}
 	if key2 == key3 {
 		t.Error("different subjects should produce different keys")

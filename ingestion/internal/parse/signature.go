@@ -396,7 +396,7 @@ func (sc *SignatureClassifier) containsSignatureSignals(text string) int {
 
 // preview returns a short preview of text for logging (2FA codes are NOT logged).
 func preview(text string, maxLen int) string {
-	if len(text) <= maxLen {
+	if len(text) <= maxLen+3 {
 		return text
 	}
 	return text[:maxLen] + "..."

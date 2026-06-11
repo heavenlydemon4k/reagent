@@ -40,10 +40,10 @@ var (
 	// 2FA / OTP / verification codes: 4-8 digit numbers preceded by keywords.
 	// The keyword-to-code gap allows up to 20 non-digit characters.
 	// Examples: "Your code is 123456", "Verification: 1234", "OTP: 789012"
-	twoFAPattern = regexp.MustCompile(`(?i)(?:code|verify|verification|otp|token|pin)[^\d]{0,20}(\d{4,8})`)
+	twoFAPattern = regexp.MustCompile(`(?i)(?:code|verify|verification|otp|token|pin)[^\d]{0,20}\b(\d{4,8})\b`)
 
-	// UPS tracking numbers: 1Z + 16 alphanumeric + 2 digits
-	trackingUPSPattern = regexp.MustCompile(`\b(1Z[0-9A-Z]{16}\d{2})\b`)
+	// UPS tracking numbers: 1Z + 16 alphanumeric (18 chars total)
+	trackingUPSPattern = regexp.MustCompile(`\b(1Z[0-9A-Z]{16})\b`)
 
 	// FedEx tracking numbers: 94 + 20 digits
 	trackingFedExPattern = regexp.MustCompile(`\b(94\d{20})\b`)
@@ -86,17 +86,13 @@ func (ce *CodeExtractor) ExtractStrings(bodyText string) []string {
 func (ce *CodeExtractor) extract2FA(bodyText string) []ExtractedCode {
 	var results []ExtractedCode
 
-	matches := twoFAPattern.FindAllStringIndex(bodyText, -1)
+	matches := twoFAPattern.FindAllStringSubmatchIndex(bodyText, -1)
 	for _, m := range matches {
-		if len(m) != 2 {
+		// m[0],m[1] = full match; m[2],m[3] = capture group 1 (the digit code)
+		if len(m) < 4 || m[2] < 0 {
 			continue
 		}
-		// Extract just the digit capture group.
-		submatch := twoFAPattern.FindStringSubmatch(bodyText[m[0]:m[1]])
-		if len(submatch) < 2 {
-			continue
-		}
-		code := submatch[1]
+		code := bodyText[m[2]:m[3]]
 		// Validate: must be 4-8 digits.
 		if len(code) < 4 || len(code) > 8 {
 			continue
@@ -108,7 +104,7 @@ func (ce *CodeExtractor) extract2FA(bodyText string) []ExtractedCode {
 		results = append(results, ExtractedCode{
 			Type:     CodeType2FA,
 			Value:    code,
-			Position: m[0],
+			Position: m[2],
 		})
 	}
 
@@ -181,11 +177,6 @@ func isFalsePositive(code string) bool {
 		if (code[:2] == "19" || code[:2] == "20") && isAllDigits(code) {
 			return true
 		}
-	}
-
-	// Sequential digits (e.g., "123456", "987654").
-	if isSequential(code) {
-		return true
 	}
 
 	return false

@@ -3,8 +3,13 @@ package crypto
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"strings"
 	"testing"
 
@@ -433,22 +438,54 @@ func TestSameDEKSamePlaintextDifferentNonces(t *testing.T) {
 	}
 }
 
-// localEncrypt performs AES-256-GCM encryption with a given DEK.
+// localEncrypt performs AES-256-GCM encryption with a given DEK, without KMS.
 func localEncrypt(dek []byte, plaintext string) (*models.EncryptedToken, error) {
 	if plaintext == "" {
 		return nil, nil
 	}
-	// This mirrors the logic in TokenCrypto.EncryptToken
-	// but without KMS calls
-	return nil, nil // simplified - actual encrypt tested via validation
+
+	nonce := make([]byte, NonceSize)
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, fmt.Errorf("failed to generate nonce: %w", err)
+	}
+
+	block, err := aes.NewCipher(dek)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	return &models.EncryptedToken{
+		Ciphertext: aesgcm.Seal(nil, nonce, []byte(plaintext), nil),
+		Nonce:      nonce,
+		KeyID:      "local-test-key",
+	}, nil
 }
 
-// localDecrypt performs AES-256-GCM decryption with a given DEK.
+// localDecrypt performs AES-256-GCM decryption with a given DEK, without KMS.
 func localDecrypt(dek []byte, enc *models.EncryptedToken) (string, error) {
 	if enc == nil {
 		return "", nil
 	}
-	// This mirrors the logic in TokenCrypto.DecryptToken
-	// but without KMS calls
-	return "", nil
+
+	block, err := aes.NewCipher(dek)
+	if err != nil {
+		return "", fmt.Errorf("failed to create AES cipher: %w", err)
+	}
+
+	aesgcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", fmt.Errorf("failed to create GCM: %w", err)
+	}
+
+	plaintext, err := aesgcm.Open(nil, enc.Nonce, enc.Ciphertext, nil)
+	if err != nil {
+		return "", fmt.Errorf("decryption failed: %w", err)
+	}
+
+	return string(plaintext), nil
 }
