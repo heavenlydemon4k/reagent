@@ -153,7 +153,7 @@ jobs:
             -count=1 \
             -timeout 10m
         env:
-          CGO_ENABLED: 1
+          CGO_ENABLED: 0
 
       - name: Test — sync
         run: |
@@ -166,7 +166,7 @@ jobs:
             -count=1 \
             -timeout 10m
         env:
-          CGO_ENABLED: 1
+          CGO_ENABLED: 0
 
       # -------------------------------------------------------------------------
       # Python setup
@@ -177,6 +177,22 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      # -------------------------------------------------------------------------
+      # Client — TypeScript type-check (no build, just tsc --noEmit)
+      # -------------------------------------------------------------------------
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: client/package-lock.json
+
+      - name: Test — client (TypeScript)
+        run: |
+          cd client
+          npm ci --legacy-peer-deps
+          npx tsc --noEmit
 
       # intelligence — uses pyproject.toml (Poetry-managed, installable package)
       - name: Cache pip — intelligence

@@ -12,6 +12,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.9.0] — 2026-06-11 — Phase 9: CI/CD Hardening
+
+### Fixed
+- `classification` and `sync` test steps: `CGO_ENABLED: 1` → `CGO_ENABLED: 0` (all Go services require static builds; no CGO)
+- Added Node.js 20 setup step with npm cache keyed to `client/package-lock.json`
+- Added client TypeScript check step: `npm ci --legacy-peer-deps && npx tsc --noEmit`
+
+---
+
 ## [0.8.0] — 2026-06-11 — Phase 6: Client TypeScript compile-clean
 
 ### Fixed (Client — `tsc --noEmit` now passes with 0 errors)
