@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/decisionstack/classification/internal/models"
 )
 

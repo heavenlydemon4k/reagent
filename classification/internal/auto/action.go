@@ -309,5 +309,3 @@ func (a *ActionExecutor) publishAutoHandled(ctx context.Context, rule models.Aut
 
 	return nil
 }
-rn nil
-}

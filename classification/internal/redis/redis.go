@@ -43,6 +43,12 @@ func (c *Client) Close() error {
 	return c.client.Close()
 }
 
+// RawClient returns the underlying go-redis client for use with packages
+// that require the raw *redis.Client (e.g. rate-limit middleware).
+func (c *Client) RawClient() *redis.Client {
+	return c.client
+}
+
 // Health checks connectivity.
 func (c *Client) Health(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)

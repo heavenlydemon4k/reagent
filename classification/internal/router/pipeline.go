@@ -33,9 +33,9 @@ const (
 
 // JetStreamContext wraps the NATS JetStream context methods we need.
 type JetStreamContext interface {
-	Consume(subj string, cfg nats.ConsumerConfig, handler nats.MsgHandler) (nats.Consumer, error)
-	Publish(subj string, data []byte) error
-	PublishMsg(msg *nats.Msg) error
+	Subscribe(subj string, cb nats.MsgHandler, opts ...nats.SubOpt) (*nats.Subscription, error)
+	Publish(subj string, data []byte) (*nats.PubAck, error)
+	PublishMsg(msg *nats.Msg) (*nats.PubAck, error)
 }
 
 // Publisher is the subset of NATS JetStream needed for publishing.
@@ -86,24 +86,21 @@ func (p *Pipeline) Start(ctx context.Context) error {
 
 	p.log.Info("starting pipeline", "subject", SubjectEmailIngested)
 
-	// Create a durable consumer with explicit config.
-	cfg := nats.ConsumerConfig{
-		Durable:       consumerName,
-		Description:   "Classification router pipeline",
-		AckPolicy:     nats.AckExplicitPolicy,
-		MaxDeliver:    maxDeliveries,
-		AckWait:       ackWaitSeconds * time.Second,
-		MaxAckPending: batchSize,
-	}
-
-	cons, err := p.consumer.Consume(SubjectEmailIngested, cfg, p.handleMessage)
+	// Create a durable JetStream consumer subscription.
+	sub, err := p.consumer.Subscribe(SubjectEmailIngested, p.handleMessage,
+		nats.Durable(consumerName),
+		nats.ManualAck(),
+		nats.MaxDeliver(maxDeliveries),
+		nats.AckWait(ackWaitSeconds*time.Second),
+		nats.MaxAckPending(batchSize),
+	)
 	if err != nil {
 		p.mu.Lock()
 		p.running = false
 		p.mu.Unlock()
 		return fmt.Errorf("create consumer: %w", err)
 	}
-	defer cons.Stop()
+	defer sub.Unsubscribe()
 
 	p.log.Info("consumer created", "durable", consumerName, "max_deliver", maxDeliveries)
 
@@ -166,8 +163,8 @@ func (p *Pipeline) handleMessage(msg *nats.Msg) {
 	defer p.wg.Done()
 
 	logger := p.log.With("nats_subject", msg.Subject)
-	if msg.Metadata != nil {
-		logger = logger.With("nats_seq", msg.Metadata.Sequence)
+	if md, err := msg.Metadata(); err == nil {
+		logger = logger.With("nats_seq", md.Sequence.Stream)
 	}
 
 	// Parse the ingested event.

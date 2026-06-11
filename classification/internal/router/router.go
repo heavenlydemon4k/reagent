@@ -111,7 +111,7 @@ func (r *Router) Route(ctx context.Context, event *models.EmailIngestedEvent) (*
 		// An active auto-handle rule fired.
 		r.metrics.RecordClassification("auto")
 		r.metrics.ObserveClassification(time.Since(start).Seconds())
-		r.metrics.RecordAutoHandleAction(result.Route) // result.Route carries action type
+		r.metrics.RecordAutoHandleAction(string(result.Route))
 		logger.Info("routed to auto",
 			"route", result.Route,
 			"matched_rule_id", result.MatchedRuleID,

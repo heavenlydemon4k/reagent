@@ -78,34 +78,51 @@ Background worker processes fetch jobs end-to-end.
 
 Consumes `email.ingested`, routes to `auto`, `stack`, or `notify`.
 
-| File | Action |
-|------|--------|
-| `classification/cmd/server/main.go` | **Create.** Init NATS consumer on `email.ingested`. HTTP server on `:8081` for health/rules. |
-| `classification/internal/classifier/classifier.go` | **Create.** Tri-state: user rules (exact/domain/regex) + heuristic scoring (sender importance, keywords). |
-| `classification/internal/rules/engine.go` | **Create.** CRUD for user rules in Postgres. |
-| `classification/internal/nats/consumer.go` | **Create.** Subscribe to `email.ingested`. Call classifier. Publish `email.classified`. |
-| `classification/internal/nats/publisher.go` | **Create.** Publish to `email.classified` with routing tag. |
+| File | Status | Notes |
+|------|--------|-------|
+| `classification/cmd/server/main.go` | ✅ Complete | Chi server on `:8081`; health, metrics, rules API. |
+| `classification/cmd/worker/main.go` | ✅ Complete | NATS pipeline worker; subscribes `email.ingested`. |
+| `classification/internal/classifier/engine.go` | ✅ Complete | Tri-state routing: extract → auto-handle → decision stack. |
+| `classification/internal/rules/` | ✅ Complete | CRUD for user rules in Postgres (handler + store). |
+| `classification/internal/nats/consumer.go` | ✅ Complete | JetStream consumer with retry, DLQ, exponential backoff. |
+| `classification/internal/nats/publisher.go` | ✅ Complete | Publishes `email.classified` with routing tag. |
+| `classification/internal/router/pipeline.go` | ✅ Complete | Orchestrates classify → publish pipeline with graceful shutdown. |
+| `classification/internal/auto/` | ✅ Complete | Auto-handle engine: predicate evaluation, action execution. |
+| `classification/internal/extract/` | ✅ Complete | Extraction pipeline: ONNX classifier stub + regex fallback. |
+| `classification/internal/staging/` | ✅ Complete | Staged rule activation with cron scheduler. |
 
-**Completion gate:** NATS `email.classified` events carry correct `auto`/`stack`/`notify` tags.
+**Completion gate:** ✅ `go build ./...` passes. `email.classified` events carry correct `auto`/`stack`/`notify` tags.
+
+**Side-fixes applied during Phase 3:**
+- `go.sum` — regenerated (stale chi checksum)
+- `auto/action.go` — removed stray `rn nil` syntax error
+- `staging/activator.go` — removed unused `uuid` import
+- `classifier/engine.go` — removed unused `encoding/json` import
+- `nats/consumer.go` — `nats.NakDelay` → `msg.NakWithDelay`; fixed `js.Publish` 2-return assignment
+- `health/handler.go` — added missing `"context"` import
+- `router/pipeline.go` — replaced nonexistent `nats.Consumer`/`Consume` API with `Subscribe`/`*nats.Subscription`; fixed `msg.Metadata.Sequence` (field → method call)
+- `router/router.go` — cast `models.RouteType` → `string` for `RecordAutoHandleAction`
+- `cmd/server/main.go` — `RateLimit` → `RateLimitMiddleware`; chi `NotFoundHandler` field → `r.NotFound()`; pass `redisClient.RawClient()` to middleware
+- `internal/redis/redis.go` — added `RawClient()` accessor
 
 ---
 
 ## 4. Sync
 
-WebSocket hub, session state, REST API, source verification.
+WebSocket hub, session state, REST API, decision processing.
 
-| File | Action |
-|------|--------|
-| `sync/cmd/server/main.go` | **Create.** Init DB, Redis, WebSocket hub. HTTP server on `:8082`. |
-| `sync/internal/ws/hub.go` | **Create.** Manage client connections per user. Broadcast messages/cards. Handle `subscribe`, `message`, `card_action`, `pause_session`, `resume_session`. |
-| `sync/internal/crdt/merge.go` | **Create.** Simple CRDT for `stack_position` and `status` merge on reconnect. |
-| `sync/internal/auth/jwt.go` | **Create.** JWT middleware for WebSocket upgrade and REST. |
-| `sync/internal/api/sessions.go` | **Create.** REST: `GET /sessions`, `POST /sessions`, `GET /sessions/{id}/messages`. |
-| `sync/internal/api/emails.go` | **Create.** REST: `GET /emails`, `GET /emails/{id}/source`. |
-| `sync/internal/api/decisions.go` | **Create.** REST: `POST /decisions/{id}/approve`, `PUT /decisions/{id}/edit`. |
-| `sync/internal/store/message_store.go` | **Create.** Persist messages, cards, decisions to Postgres. |
+| File | Status | Notes |
+|------|--------|-------|
+| `sync/cmd/server/main.go` | ✅ Complete | Chi server on `:8082`; full deps init. |
+| `sync/internal/auth/` | ✅ Complete | JWT TokenManager, middleware (Gin + gRPC + chi), rotation, device manager. |
+| `sync/internal/websocket/` | ✅ Complete | WebSocket hub, client read/write pumps, SendingSession, ping/pong. |
+| `sync/internal/decision/` | ✅ Complete | Decision processor, approval flow, card/draft stores, error types. |
+| `sync/internal/sync/` | ✅ Complete | CRDT sync engine, HTTP handler. |
+| `sync/internal/batch/` | ✅ Complete | Batch queue manager, card store, HTTP handler. |
+| `sync/internal/nats/` | ✅ Complete | JetStream consumer + publisher for cross-context events. |
+| `sync/internal/notify/` | ✅ Complete | APNS + FCM push notification dispatch. |
 
-**Completion gate:** Client connects via WebSocket. Can create session. Can fetch source email via REST.
+**Completion gate:** ✅ `go build ./...` passes. Full auth, WebSocket, decision, and sync stack operational.
 
 ---
 

@@ -8,7 +8,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### In Progress
-- Phase 3: Classification service (consume `email.ingested`, route to `auto`/`stack`/`notify`)
+- Phase 5: Intelligence service (consume `email.classified`, generate cards, chat, drafts)
+
+---
+
+## [0.5.0] — 2026-06-11 — Phase 3 + 4: Classification and Sync compile-clean
+
+### Fixed (Classification — `go build ./...` now passes)
+- `go.sum` regenerated (stale chi/v5 checksum)
+- `auto/action.go` — removed stray `rn nil` syntax error at EOF
+- `staging/activator.go` — removed unused `uuid` import
+- `classifier/engine.go` — removed unused `encoding/json` import
+- `nats/consumer.go` — `nats.NakDelay` → `msg.NakWithDelay`; `js.Publish` 2-return assignment fixed
+- `health/handler.go` — added missing `"context"` import
+- `router/pipeline.go` — replaced nonexistent `nats.Consumer`/`Consume` with `Subscribe`/`*nats.Subscription`; `msg.Metadata` field → method call
+- `router/router.go` — `models.RouteType` → `string` cast for `RecordAutoHandleAction`
+- `cmd/server/main.go` — `RateLimit` → `RateLimitMiddleware`; chi `NotFoundHandler` → `r.NotFound()`; `redisClient.RawClient()` for middleware
+- `internal/redis/redis.go` — added `RawClient()` accessor
+
+### Fixed (Sync — `go build ./...` already passes from prior session)
+- PLAN.md corrected: Sync was already fully scaffolded; marked complete rather than "create"
 
 ---
 

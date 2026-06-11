@@ -70,7 +70,9 @@ func main() {
 	r.Use(middleware.StripSlashes)
 	r.Use(middleware.Timeout(30 * time.Second))
 	r.Use(appmiddleware.SecurityHeaders)
-	r.Use(appmiddleware.RateLimit(redisClient, 200, 1*time.Minute))
+	if redisClient != nil {
+		r.Use(appmiddleware.RateLimitMiddleware(redisClient.RawClient(), 200, 1*time.Minute))
+	}
 
 	// Health & metrics
 	healthChecker.Routes(r)
@@ -82,10 +84,10 @@ func main() {
 	})
 
 	// 404 handler
-	r.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
-		fmt.Fprintf(w, `{"error":"not found","path":"%s"}`+"\n", r.URL.Path)
+		fmt.Fprintf(w, `{"error":"not found","path":"%s"}`+"\n", req.URL.Path)
 	})
 
 	// ─── HTTP Server ──────────────────────────────────────────────────────────

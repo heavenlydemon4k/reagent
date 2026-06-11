@@ -3,7 +3,6 @@ package classifier
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 

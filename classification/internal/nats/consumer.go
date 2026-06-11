@@ -270,7 +270,7 @@ func (c *Consumer) processMessage(ctx context.Context, msg *nats.Msg) error {
 
 	if err != nil {
 		// All retries exhausted — nak with delay so NATS redelivers.
-		msg.Nak(nats.NakDelay(5 * time.Second))
+		msg.NakWithDelay(5 * time.Second)
 		return fmt.Errorf("classify/publish failed after %d attempts: %w", c.retryConfig.MaxAttempts, err)
 	}
 
@@ -288,7 +288,7 @@ func (c *Consumer) processMessage(ctx context.Context, msg *nats.Msg) error {
 func (c *Consumer) sendToDLQ(ctx context.Context, msg *nats.Msg) {
 	log := c.log.With("dlq_subject", c.dlqSubject)
 	// Forward original message to DLQ
-	if err := c.js.Publish(c.dlqSubject, msg.Data); err != nil {
+	if _, err := c.js.Publish(c.dlqSubject, msg.Data); err != nil {
 		log.Error("dlq publish failed", "error", err)
 		return
 	}
