@@ -31,6 +31,11 @@ class AgentOrchestrator:
         self, user_id: str, session_id: str, content: str, session_manager: SessionManager
     ) -> Dict[str, Any]:
         intent = self._classify_intent(content)
+        # When a decision card is active, a natural-language reply that does not
+        # clearly target the knowledge base or stack controls is treated as the
+        # user's response to that card — the conversational decision mechanism.
+        if intent == "general_chat" and await self.stack.get_active(session_id):
+            intent = "decision_action"
         if intent == "decision_action":
             return await self._handle_decision_action(user_id, session_id, content, session_manager)
         elif intent == "kb_query":
@@ -92,12 +97,19 @@ class AgentOrchestrator:
         active_card = await self.stack.get_active(session_id)
         if not active_card:
             return self._agent_response(session_id, "No active decision card. Start a stack session first.", session_manager)
-        action = self._parse_action(content)
-        if action in ["archive", "snooze"]:
-            await self.stack.resolve_card(active_card.id, action)
+        action, params = await self._classify_decision_intent(content, active_card)
+        if action in ["archive", "snooze", "reject"]:
+            await self.stack.resolve_card(active_card.id, action, payload=params or None)
             sender = active_card.source_email.get("from", "unknown")
-            return self._agent_response(session_id, "Done. I have " + action + "ed the email from " + sender + ".", session_manager, card_resolved={"card_id": active_card.id, "action": action})
-        draft = await self.drafting.draft_reply(user_id=user_id, email_id=active_card.email_id, decision_action=action, user_instruction=content if len(content) > 10 else None)
+            verb = {"archive": "archived", "snooze": "snoozed", "reject": "declined"}[action]
+            return self._agent_response(session_id, "Done. I have " + verb + " the email from " + sender + ".", session_manager, card_resolved={"card_id": active_card.id, "action": action})
+        # Build the drafting instruction from the user's words plus any structured
+        # parameters the classifier extracted (e.g. a CC address or explicit guidance).
+        instruction = params.get("instruction") or (content if len(content) > 10 else None)
+        cc = params.get("cc")
+        if cc:
+            instruction = (instruction or "Draft a reply.") + f" CC {cc} on the reply."
+        draft = await self.drafting.draft_reply(user_id=user_id, email_id=active_card.email_id, card_id=active_card.id, decision_action=action, user_instruction=instruction)
         preview_payload = {
             "type": "card", "card_type": "confirm", "title": "Draft: " + active_card.title,
             "body": draft["draft_text"], "source_email_id": active_card.email_id,
@@ -139,7 +151,7 @@ class AgentOrchestrator:
         session = session_manager.get(session_id)
         history = session.messages[-10:] if session else []
         history_str = "\n".join([m["role"] + ": " + m["content"] for m in history])
-        profile = self.profile.get_or_create(user_id) if self.profile else None
+        profile = (await self.profile.get_or_create(user_id)) if self.profile else None
         suffix = profile.system_prompt_suffix if profile else ""
         lines = [
             "You are an email agent. Be direct and concise. " + suffix,
@@ -203,11 +215,43 @@ class AgentOrchestrator:
     def _extract_source_ids(self, text: str) -> List[str]:
         return re.findall(r"\[Source:\s*([a-f0-9\-]+)\]", text)
 
-    def _parse_action(self, content: str) -> str:
+    _VALID_INTENTS = ["approve", "reject", "reply", "forward", "delegate", "archive", "snooze", "request_info"]
+
+    async def _classify_decision_intent(self, content: str, card: "DecisionCard"):
+        """Classify a natural-language response to a decision card into a
+        structured (intent, params) pair using the LLM. Falls back to a keyword
+        heuristic if the model output cannot be parsed."""
+        prompt = "\n".join([
+            "The user is responding in plain language to a decision about an email. Classify their response.",
+            "",
+            "Email: " + str(card.title) + " — " + str(card.body),
+            "User response: " + repr(content),
+            "",
+            "Return ONLY JSON with this shape (no markdown):",
+            '{"intent": "approve|reject|reply|forward|delegate|archive|snooze|request_info", "params": {}}',
+            "Rules:",
+            "- intent is the single action the user wants.",
+            '- params may include: "cc" (email address to copy), "forward_to" (address to forward to),',
+            '  "delegate_to" (person to hand off to), or "instruction" (free-text guidance for the reply).',
+            "- Omit params you cannot extract; return an empty object if none.",
+        ])
+        try:
+            response = await self.llm.route(prompt, complexity="auto")
+            data = json.loads(response.text)
+            intent = data.get("intent", "reply")
+            params = data.get("params", {}) or {}
+            if intent not in self._VALID_INTENTS:
+                intent = "reply"
+            if not isinstance(params, dict):
+                params = {}
+        except (json.JSONDecodeError, AttributeError, ValueError, TypeError):
+            intent, params = self._parse_action_fallback(content), {}
+        return intent, params
+
+    def _parse_action_fallback(self, content: str) -> str:
         text = content.lower().strip()
-        if text.startswith("approve"): return "approve"
-        if text.startswith("reject"): return "reject"
-        if text.startswith("reply"): return "reply"
+        if text.startswith("approve") or "approve" in text: return "approve"
+        if text.startswith("reject") or "decline" in text: return "reject"
         if text.startswith("forward"): return "forward"
         if text.startswith("delegate"): return "delegate"
         if text.startswith("archive"): return "archive"

@@ -43,18 +43,18 @@ func TestGap1_NATSPublisherNotNoOp(t *testing.T) {
 
 	source := string(data)
 
-	// The noOpNatsPublisher type definition should still exist (it's a stub)
-	// but we verify the *struct name* is present — the gap is that the
-	// ApprovalFlow was constructed with &noOpNatsPublisher{}
-	if !strings.Contains(source, "noOpNatsPublisher") {
-		t.Error("sync/cmd/server/main.go no longer contains noOpNatsPublisher — verify real publisher is wired")
+	// Gap closed: the approval flow must be wired with a real NATS publisher.
+	// The sync service connects to JetStream and injects NewSyncNatsAdapter;
+	// NoOpNatsPublisher may remain only as a degraded fallback when NATS is
+	// unavailable at startup.
+	if !strings.Contains(source, "NewSyncNatsAdapter") {
+		t.Error("sync/cmd/server/main.go does not wire the real NATS publisher (NewSyncNatsAdapter) — email.send jobs will not be published")
 	}
 
-	// Verify that the approval flow construction uses the no-op
-	// This documents the CURRENT state — the gap exists until a real
-	// NATS publisher is injected.
+	// Regression guard: the approval flow must not be constructed with the
+	// no-op publisher as its primary dependency.
 	if strings.Contains(source, "NewApprovalFlow(draftStore, cardStore, &noOpNatsPublisher{}") {
-		t.Log("GAP CONFIRMED: sync service still uses noOpNatsPublisher — email.send jobs will not be published")
+		t.Error("GAP REGRESSED: approval flow constructed with the no-op publisher; email.send jobs will be silently dropped")
 	}
 
 	// Verify JetStreamPublisher type exists in ingestion (real implementation)
@@ -195,20 +195,22 @@ func TestGap3_ResolveRecipientQuery(t *testing.T) {
 		t.Error("resolveRecipient method not found in send_consumer.go")
 	}
 
-	// Verify the In-Reply-To lookup query exists
-	if !strings.Contains(source, "SELECT sender_email FROM raw_emails WHERE message_id") {
-		t.Error("In-Reply-To lookup query not found")
+	// Recipient resolution is thread-based: it reads sender_email from
+	// raw_emails joined on thread_id.
+	if !strings.Contains(source, "FROM raw_emails") || !strings.Contains(source, "thread_id") {
+		t.Error("thread-based recipient lookup (raw_emails / thread_id) not found")
 	}
 
-	// Verify the thread fallback query exists
-	if !strings.Contains(source, "SELECT sender_email FROM raw_emails") ||
-		!strings.Contains(source, "thread_id") {
-		t.Error("Thread fallback lookup query not found")
+	// The user's own account is excluded via source_account_id so the reply is
+	// addressed to the counterparty, not bounced back to the user's own address.
+	if !strings.Contains(source, "source_account_id !=") {
+		t.Error("own-account exclusion (source_account_id !=) not found in recipient lookup")
 	}
 
-	// Verify the account email exclusion is present
-	if !strings.Contains(source, "sender_email !=") {
-		t.Error("Account email exclusion not found in thread lookup")
+	// Phase 10 passthrough: an explicit recipient on the payload is authoritative
+	// and must take precedence over thread-based resolution.
+	if !strings.Contains(source, "strings.TrimSpace(payload.To)") {
+		t.Error("explicit payload.To is not preferred over thread-based resolution")
 	}
 }
 

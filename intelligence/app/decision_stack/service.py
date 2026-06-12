@@ -21,7 +21,7 @@ class DecisionCard:
     title: str
     body: str
     source_email: Dict[str, Any]
-    options: List[Dict[str, str]]
+    question: str
     status: str
     resolution: Optional[Dict[str, Any]] = None
     created_at: float = field(default_factory=time.time)
@@ -50,7 +50,7 @@ class DecisionStackService:
                 payload_json={
                     "title": card.title,
                     "body": card.body,
-                    "options": card.options,
+                    "question": card.question,
                     "source_email": card.source_email,
                 },
                 status="queued",
@@ -61,7 +61,7 @@ class DecisionStackService:
 
     async def _generate_card(self, user_id: str, email: EmailContext, thread: List[EmailContext]) -> DecisionCard:
         context = self.kb.summarize_for_agent(thread)
-        prompt = f"""You are an email decision assistant. The user received this email and needs to decide what to do.
+        prompt = f"""You are an email decision assistant. The user received this email and needs to decide what to do. The user answers you in plain language in chat — there are no buttons — so phrase a direct question that invites a natural reply.
 
 Email thread context:
 {context}
@@ -70,16 +70,10 @@ Generate a JSON decision card with this exact shape:
 {{
     "title": "Short, specific title",
     "body": "1-2 sentence summary of what the email is asking",
-    "options": [
-        {{"id": "reply", "label": "Reply", "style": "primary"}},
-        {{"id": "forward", "label": "Forward", "style": "default"}},
-        {{"id": "archive", "label": "Archive", "style": "default"}},
-        {{"id": "snooze", "label": "Snooze", "style": "default"}},
-        {{"id": "delegate", "label": "Delegate", "style": "default"}}
-    ]
+    "question": "A direct, specific question asking the user how they want to handle this email (e.g. 'Want me to reply and confirm the meeting, or decline?')"
 }}
 
-Only return valid JSON. No markdown, no explanation."""
+Only return valid JSON. No markdown, no explanation. Do not include an options array — the user responds conversationally."""
 
         response = await self.llm.route(prompt, complexity="complex")
         try:
@@ -88,11 +82,7 @@ Only return valid JSON. No markdown, no explanation."""
             parsed = {
                 "title": email.subject,
                 "body": f"From {email.from_address}: {email.body_text[:200]}",
-                "options": [
-                    {"id": "reply", "label": "Reply", "style": "primary"},
-                    {"id": "archive", "label": "Archive", "style": "default"},
-                    {"id": "snooze", "label": "Snooze", "style": "default"},
-                ],
+                "question": f"How do you want to handle this email from {email.from_address}?",
             }
 
         return DecisionCard(
@@ -110,7 +100,7 @@ Only return valid JSON. No markdown, no explanation."""
                 "body_text": email.body_text,
                 "received_at": email.received_at,
             },
-            options=parsed.get("options", []),
+            question=parsed.get("question", f"How do you want to handle this email from {email.from_address}?"),
             status="queued",
         )
 
@@ -240,13 +230,15 @@ Only return valid JSON. No markdown, no explanation."""
             return {"success": False, "error": str(e)}
 
     def to_message_payload(self, card: DecisionCard) -> Dict[str, Any]:
+        # Decision cards are conversational: they carry a `question` string and
+        # NO options array. The user's chat reply is the decision mechanism.
         return {
             "type": "card",
             "card_type": "decision",
             "title": card.title,
             "body": card.body,
+            "question": card.question,
             "source_email_id": card.email_id,
-            "options": card.options,
             "metadata": {"card_id": card.id, "email_id": card.email_id},
         }
 
@@ -260,7 +252,7 @@ Only return valid JSON. No markdown, no explanation."""
             title=payload.get("title", ""),
             body=payload.get("body", ""),
             source_email=payload.get("source_email", {}),
-            options=payload.get("options", []),
+            question=payload.get("question", ""),
             status=row.status,
             resolution=row.resolution_json,
             created_at=row.created_at.timestamp() if row.created_at else 0,

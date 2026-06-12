@@ -29,8 +29,9 @@ class DraftingService:
         decision_action: str,
         user_instruction: Optional[str] = None,
         thread_context: Optional[List[EmailContext]] = None,
+        card_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        profile = self.profile.get_or_create(user_id) if self.profile else None
+        profile = (await self.profile.get_or_create(user_id)) if self.profile else None
         if thread_context is None:
             thread_context = self.kb.thread_context(email_id)
         email = thread_context[0] if thread_context else None
@@ -63,7 +64,7 @@ Return ONLY the draft text. No JSON, no markdown, no explanation."""
 
         await self._persist_draft(
             user_id=user_id,
-            email_id=email_id,
+            card_id=card_id or email_id,
             action_type=decision_action,
             draft_text=draft_text,
             to_address=email.from_address,
@@ -114,20 +115,32 @@ Return ONLY the draft text."""
         }
 
     async def edit_draft(self, card_id: str, edit_text: str) -> Dict[str, Any]:
-        """Apply user edits to a draft. Returns updated draft."""
-        prompt = f"""The user has edited their draft. Apply their changes and return the full updated draft.
+        """Apply user edits to a draft. Loads the current draft so the model can
+        edit what it can see, then persists the updated text."""
+        current = await self._load_latest_draft(card_id)
+        current_draft = (current or {}).get("draft_text", "") or ""
+        current_subject = (current or {}).get("subject", "") or ""
+
+        prompt = f"""The user wants to revise the email draft below. Apply their instruction and return the full updated draft — keep everything they did not ask to change.
+
+Current draft:
+Subject: {current_subject}
+{current_draft}
 
 User edit instruction: {edit_text}
 
-Return ONLY the updated draft text. Include "Subject: " line if applicable."""
+Return ONLY the updated draft text. Include a "Subject: " line."""
 
         response = await self.llm.route(prompt, complexity="complex")
         draft_text = response.text.strip()
-        subject = ""
+        subject = current_subject
         if draft_text.startswith("Subject:"):
             parts = draft_text.split("\n", 1)
             subject = parts[0].replace("Subject:", "").strip()
             draft_text = parts[1].strip() if len(parts) > 1 else draft_text
+
+        if current and current.get("id"):
+            await self._update_draft(current["id"], draft_text, subject)
 
         return {
             "draft_text": draft_text,
@@ -135,6 +148,38 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
             "cost_usd": response.meter.total_cost_usd,
             "model": response.model,
         }
+
+    async def _load_latest_draft(self, card_id: str) -> Optional[Dict[str, Any]]:
+        """Return the most recent persisted draft for a card as a plain dict
+        (values copied inside the session to avoid detached-instance access)."""
+        async with db_session() as db:
+            from sqlalchemy import select
+            result = await db.execute(
+                select(DecisionModel)
+                .where(DecisionModel.card_id == card_id)
+                .order_by(DecisionModel.created_at.desc())
+                .limit(1)
+            )
+            row = result.scalar_one_or_none()
+            if not row:
+                return None
+            return {
+                "id": row.id,
+                "draft_text": row.draft_text,
+                "subject": row.subject,
+                "to_address": row.to_address,
+                "thread_id": row.thread_id,
+                "account_id": row.account_id,
+            }
+
+    async def _update_draft(self, decision_id: str, draft_text: str, subject: Optional[str]) -> None:
+        async with db_session() as db:
+            from sqlalchemy import select
+            result = await db.execute(select(DecisionModel).where(DecisionModel.id == decision_id))
+            dec = result.scalar_one_or_none()
+            if dec:
+                dec.draft_text = draft_text
+                dec.subject = subject
 
     async def send_draft(self, draft_id: str) -> Dict[str, Any]:
         """Send an approved draft via Ingestion API."""
@@ -175,7 +220,7 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
     async def _persist_draft(
         self,
         user_id: str,
-        email_id: str,
+        card_id: str,
         action_type: str,
         draft_text: str,
         to_address: Optional[str] = None,
@@ -189,7 +234,7 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
             decision = DecisionModel(
                 id=str(__import__("uuid").uuid4()),
                 user_id=user_id,
-                card_id=email_id,
+                card_id=card_id,
                 action_type=action_type,
                 draft_text=draft_text,
                 to_address=to_address,

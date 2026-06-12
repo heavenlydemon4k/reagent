@@ -13,7 +13,7 @@ profile_service = ProfileService()
 @router.get("/me")
 async def get_my_profile(user_id: str = Depends(get_current_user)):
     """Get current user's profile."""
-    profile = profile_service.get_or_create(user_id)
+    profile = await profile_service.get_or_create(user_id)
     return {
         "user_id": profile.user_id,
         "system_prompt_suffix": profile.system_prompt_suffix,
@@ -27,7 +27,7 @@ async def update_my_profile(
     user_id: str = Depends(get_current_user),
 ):
     """Update current user's profile."""
-    profile = profile_service.update(user_id, updates)
+    profile = await profile_service.update(user_id, updates)
     return {
         "user_id": profile.user_id,
         "system_prompt_suffix": profile.system_prompt_suffix,
@@ -38,7 +38,7 @@ async def update_my_profile(
 @router.get("/me/preferences")
 async def get_my_preferences(user_id: str = Depends(get_current_user)):
     """Get agent behavior preferences."""
-    profile = profile_service.get_or_create(user_id)
+    profile = await profile_service.get_or_create(user_id)
     prefs = profile.preferences_json or {}
     return {
         "agent_detail_level": prefs.get("agent_detail_level", "concise"),

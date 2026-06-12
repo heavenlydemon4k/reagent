@@ -1,10 +1,30 @@
 import { useEffect, useRef, useCallback, useState } from 'react'
 import { useSessionStore } from '../store/sessionStore'
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8000/chat/ws'
+// Sync (:8082) owns the client WebSocket hub (see PLAN.md Phase 13 / design log).
+// Honor VITE_WS_URL; the dev fallback points at Sync's /ws route, not the
+// deprecated Intelligence :8000/chat/ws endpoint.
+const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8082/ws'
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 30000
 const HEARTBEAT_INTERVAL_MS = 30000
+
+// Sync requires a stable per-device identifier. Browsers cannot set the
+// X-Device-ID header on a WebSocket, so it is sent as a query parameter; Sync
+// reads it from the query when the header is absent. Persisted so reconnects
+// and refreshes keep the same device identity (single-connection-per-device).
+function getDeviceId(): string {
+  try {
+    let id = localStorage.getItem('reagent_device_id')
+    if (!id) {
+      id = crypto.randomUUID()
+      localStorage.setItem('reagent_device_id', id)
+    }
+    return id
+  } catch {
+    return 'web-ephemeral'
+  }
+}
 
 export function useWebSocket(token: string) {
   const ws = useRef<WebSocket | null>(null)
@@ -25,7 +45,11 @@ export function useWebSocket(token: string) {
     if (ws.current?.readyState === WebSocket.OPEN || ws.current?.readyState === WebSocket.CONNECTING) return
 
     const sessionId = useSessionStore.getState().activeSessionId
-    const url = sessionId ? `${WS_URL}/${sessionId}?token=${token}` : `${WS_URL}?token=${token}`
+    // Sync's route is exactly /ws with query-param auth; the session is NOT a
+    // path segment. Pass token + device_id (+ session_id when present) as query.
+    const params = new URLSearchParams({ token, device_id: getDeviceId() })
+    if (sessionId) params.set('session_id', sessionId)
+    const url = `${WS_URL}?${params.toString()}`
     const socket = new WebSocket(url)
 
     socket.onopen = () => {

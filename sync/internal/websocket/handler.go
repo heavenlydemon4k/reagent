@@ -75,11 +75,16 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) *Client {
 		return nil
 	}
 
-	// 3. Check X-Device-ID header
+	// 3. Resolve device ID. Native clients send the X-Device-ID header; browser
+	//    WebSocket clients cannot set custom headers, so fall back to a
+	//    ?device_id= query parameter.
 	deviceID := r.Header.Get("X-Device-ID")
 	if deviceID == "" {
+		deviceID = r.URL.Query().Get("device_id")
+	}
+	if deviceID == "" {
 		logger.Warn("websocket: connection rejected", "reason", "missing_device_id", "ip", r.RemoteAddr)
-		writeWSError(w, http.StatusBadRequest, "invalid_request", "missing X-Device-ID", false)
+		writeWSError(w, http.StatusBadRequest, "invalid_request", "missing device id (X-Device-ID header or device_id query param)", false)
 		return nil
 	}
 
