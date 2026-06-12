@@ -105,12 +105,14 @@ func run() error {
 	webhookHandler := webhook.NewHandler(cfg, redisClient.Client(), natsPublisher, enqueuer, log)
 
 	// ── Server ────────────────────────────────────────────────────────────────
+	sendHandler := server.NewSendHandler(natsPublisher)
 	deps := &server.Dependencies{
 		Log:            log,
 		Config:         cfg,
 		WebhookHandler: webhookHandler,
 		OAuthHandler:   oauthHandler,
 		NATSPublisher:  natsPublisher,
+		SendHandler:    sendHandler,
 	}
 
 	srv := server.NewServer(cfg, deps)

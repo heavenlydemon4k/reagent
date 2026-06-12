@@ -8,7 +8,7 @@
 
 > **Note for readers (updated 2026-06-11):** This document is a deep architectural audit record. Several details have since changed:
 > - Service paths: `intelligence/intelligence/app/...` references are stale. The intelligence service is at `intelligence/app/`.
-> - Agent personality: `agent_name`, `agent_tone` have been removed from all code and the data model. The system prompt is neutral.
+> - Agent name and tone: The chat agent is named **Bizzy**. Tone is professional and capable — direct, unadorned, no fake warmth or relentless positivity. `agent_name` and `agent_tone` softness fields have been removed from the data model. System prompt: "You are Bizzy, an email agent. Tone: professional and capable. Direct. No affirmations, no filler."
 > - Card format: button-driven `options[]` arrays have been replaced with a single `question` string per the "conversational cards" design decision.
 > - Branding: The project is "Reagent", not "Decision Stack".
 > - For current state, see [PLAN.md](../../PLAN.md), [CHANGELOG.md](../../CHANGELOG.md), and [master-state.md](master-state.md).

@@ -23,6 +23,7 @@ class EmailContext:
     thread_id: Optional[str]
     labels: List[str]
     score: float
+    account_id: Optional[str] = None
 
 
 class EmailKnowledgeBase:

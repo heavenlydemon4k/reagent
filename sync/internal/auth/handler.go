@@ -363,15 +363,7 @@ func writeJSONError(w http.ResponseWriter, status int, code, message string) {
 // userIDFromContext extracts and parses the user ID from the request context.
 // Returns uuid.Nil if not present or not a valid UUID.
 func userIDFromContext(ctx context.Context) uuid.UUID {
-	userIDStr, ok := UserIDFromContext(ctx)
-	if !ok || userIDStr == "" {
-		return uuid.Nil
-	}
-	uid, err := uuid.Parse(userIDStr)
-	if err != nil {
-		return uuid.Nil
-	}
-	return uid
+	return UserIDFromContext(ctx)
 }
 
 // resolveUserID extracts the authenticated user ID from the request.
@@ -402,13 +394,15 @@ func resolveUserID(r *http.Request) uuid.UUID {
 // AuthRoutes registers auth routes on the provided Chi router.
 // This is an alias for MountAuthRoutes.
 func AuthRoutes(r chi.Router, h *Handler) {
-	MountAuthRoutes(r, h)
+	r.Route("/auth", func(r chi.Router) {
+		MountAuthRoutes(r, h)
+	})
 }
 
 // MountAuthRoutes registers auth routes on the provided Chi router.
 func MountAuthRoutes(r chi.Router, h *Handler) {
 	r.Post("/device", h.RegisterDevice)
 	r.Post("/refresh", h.RefreshToken)
-	r.Delete("/sessions/{id}", h.RevokeSession)
+	r.Post("/revoke", h.RevokeSession)
 	r.Get("/sessions", h.ListSessions)
 }

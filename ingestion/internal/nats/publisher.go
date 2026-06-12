@@ -97,6 +97,35 @@ func (p *ReliablePublisher) publishToDLQ(ctx context.Context, data []byte) error
 	return nil
 }
 
+// PublishSendJob publishes a send job with retry and DLQ fallback.
+func (p *ReliablePublisher) PublishSendJob(ctx context.Context, payload SendJobPayload) error {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal send job: %w", err)
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < maxPublishRetries; attempt++ {
+		if attempt > 0 {
+			delay := retryBaseDelay * time.Duration(1<<uint(attempt-1))
+			if delay > retryMaxDelay {
+				delay = retryMaxDelay
+			}
+			select {
+			case <-ctx.Done():
+				return fmt.Errorf("publish cancelled: %w", ctx.Err())
+			case <-time.After(delay):
+			}
+		}
+		_, err = p.inner.js.Publish(SubjectEmailSend, data)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+	}
+	return fmt.Errorf("publish send job failed after %d retries: %w", maxPublishRetries, lastErr)
+}
+
 // HealthCheck verifies NATS connection and stream health.
 func (p *ReliablePublisher) HealthCheck() error {
 	if p.inner.nc == nil || !p.inner.nc.IsConnected() {

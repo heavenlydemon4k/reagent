@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -38,8 +39,16 @@ type contextKey int
 const (
 	// ContextKeyClaims stores validated Claims in context.
 	ContextKeyClaims contextKey = iota
-	// ContextKeyUserID stores the user ID in context.
+	// ContextKeyUserID stores the user ID (uuid.UUID) in context.
 	ContextKeyUserID
+	// ContextKeyDeviceID stores the device ID string in context.
+	ContextKeyDeviceID
+)
+
+// Unexported aliases used internally and by white-box tests.
+const (
+	ctxKeyUserID   = ContextKeyUserID
+	ctxKeyDeviceID = ContextKeyDeviceID
 )
 
 // ------------------------------------------------------------------------------
@@ -191,8 +200,10 @@ func GRPCUnaryInterceptor(validator *MultiKeyValidator) grpc.UnaryServerIntercep
 		}
 
 		// Add claims to context
+		uid, _ := uuid.Parse(claims.UserID)
 		ctx = context.WithValue(ctx, ContextKeyClaims, claims)
-		ctx = context.WithValue(ctx, ContextKeyUserID, claims.UserID)
+		ctx = context.WithValue(ctx, ContextKeyUserID, uid)
+		ctx = context.WithValue(ctx, ContextKeyDeviceID, claims.DeviceID)
 
 		return handler(ctx, req)
 	}
@@ -250,10 +261,10 @@ func (w *wrappedStream) Context() context.Context {
 // Context Helpers
 // ------------------------------------------------------------------------------
 
-// UserIDFromContext extracts the user ID from context.
-func UserIDFromContext(ctx context.Context) (string, bool) {
-	userID, ok := ctx.Value(ContextKeyUserID).(string)
-	return userID, ok
+// UserIDFromContext extracts the user ID (uuid.UUID) from context.
+func UserIDFromContext(ctx context.Context) uuid.UUID {
+	uid, _ := ctx.Value(ContextKeyUserID).(uuid.UUID)
+	return uid
 }
 
 // ClaimsFromContext extracts the full claims from context.
@@ -262,26 +273,25 @@ func ClaimsFromContext(ctx context.Context) (*Claims, bool) {
 	return claims, ok
 }
 
-// MustUserID extracts user ID or returns empty string.
+// MustUserID extracts user ID as string or returns empty string.
 func MustUserID(ctx context.Context) string {
-	userID, _ := UserIDFromContext(ctx)
-	return userID
+	return UserIDFromContext(ctx).String()
 }
 
-// MustGetUserID extracts the user ID as a UUID, returning an error if absent or unparsable.
+// MustGetUserID extracts the user ID as a UUID, returning an error if absent.
 func MustGetUserID(ctx context.Context) (uuid.UUID, error) {
-	userIDStr, ok := UserIDFromContext(ctx)
-	if !ok || userIDStr == "" {
-		return uuid.Nil, fmt.Errorf("user ID not in context")
+	uid := UserIDFromContext(ctx)
+	if uid == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("user ID not found in context")
 	}
-	return uuid.Parse(userIDStr)
+	return uid, nil
 }
 
 // DeviceIDFromContext extracts the device ID from context.
-// Returns empty string if not present (gRPC interceptors do not store device ID).
+// Returns empty string if not present.
 func DeviceIDFromContext(ctx context.Context) string {
-	_ = ctx
-	return ""
+	deviceID, _ := ctx.Value(ContextKeyDeviceID).(string)
+	return deviceID
 }
 
 // ------------------------------------------------------------------------------
@@ -295,22 +305,40 @@ func JWTMiddleware(tm *TokenManager) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				http.Error(w, `{"error":"missing_authorization_header"}`, http.StatusUnauthorized)
+				http.Error(w, `{"error":"auth_missing"}`, http.StatusUnauthorized)
 				return
 			}
 			parts := strings.SplitN(authHeader, " ", 2)
 			if len(parts) != 2 || strings.ToLower(parts[0]) != "bearer" {
-				http.Error(w, `{"error":"invalid_authorization_format"}`, http.StatusUnauthorized)
+				http.Error(w, `{"error":"auth_malformed"}`, http.StatusUnauthorized)
 				return
 			}
-			userID, _, err := tm.ValidateAccessToken(parts[1])
+			tokenStr := parts[1]
+			if tokenStr == "" {
+				http.Error(w, `{"error":"auth_empty"}`, http.StatusUnauthorized)
+				return
+			}
+			userID, deviceID, err := tm.ValidateAccessToken(tokenStr)
 			if err != nil {
-				http.Error(w, `{"error":"token_invalid"}`, http.StatusUnauthorized)
+				errStr := err.Error()
+				if strings.Contains(errStr, "expired") {
+					http.Error(w, `{"error":"auth_expired"}`, http.StatusUnauthorized)
+				} else {
+					http.Error(w, `{"error":"auth_invalid"}`, http.StatusUnauthorized)
+				}
 				return
 			}
-			ctx := context.WithValue(r.Context(), ContextKeyUserID, userID.String())
+			ctx := context.WithValue(r.Context(), ContextKeyUserID, userID)
+			ctx = context.WithValue(ctx, ContextKeyDeviceID, deviceID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
+	}
+}
+
+// ProtectedRoutes returns a chi-compatible middleware factory that applies JWT auth.
+func ProtectedRoutes(tm *TokenManager) func(r chi.Router) func(http.Handler) http.Handler {
+	return func(r chi.Router) func(http.Handler) http.Handler {
+		return JWTMiddleware(tm)
 	}
 }
 

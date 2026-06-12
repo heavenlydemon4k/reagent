@@ -16,9 +16,11 @@ import (
 // Production: JetStreamPublisher. Testing: MockPublisher.
 type Publisher interface {
 	PublishEmailIngested(ctx context.Context, event EmailIngestedEvent) error
+	PublishSendJob(ctx context.Context, payload SendJobPayload) error
 	HealthCheck() error
 	Close() error
 }
+// SendJobPayload is defined in send_consumer.go (same package).
 
 // EmailIngestedEvent is published to subject "email.ingested" after a raw
 // email has been parsed, threaded, deduped, and persisted.
@@ -200,6 +202,16 @@ func (p *JetStreamPublisher) PublishEmailIngested(ctx context.Context, event Ema
 	}
 
 	_, err = p.js.Publish(SubjectEmailIngested, data)
+	return err
+}
+
+// PublishSendJob publishes a send job to the email.send stream.
+func (p *JetStreamPublisher) PublishSendJob(ctx context.Context, payload SendJobPayload) error {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	_, err = p.js.Publish(SubjectEmailSend, data)
 	return err
 }
 

@@ -22,7 +22,7 @@ class DraftingService:
         self.kb = kb or EmailKnowledgeBase()
         self.profile = profile
 
-    def draft_reply(
+    async def draft_reply(
         self,
         user_id: str,
         email_id: str,
@@ -53,7 +53,7 @@ Draft a concise, natural email reply. Include a subject line prefixed with "Subj
 
 Return ONLY the draft text. No JSON, no markdown, no explanation."""
 
-        response = self.llm.route(prompt, complexity="complex")
+        response = await self.llm.route(prompt, complexity="complex")
         draft_text = response.text.strip()
         subject = email.subject
         if draft_text.startswith("Subject:"):
@@ -61,8 +61,16 @@ Return ONLY the draft text. No JSON, no markdown, no explanation."""
             subject = parts[0].replace("Subject:", "").strip()
             draft_text = parts[1].strip() if len(parts) > 1 else draft_text
 
-        import asyncio
-        asyncio.create_task(self._persist_draft(user_id, email_id, decision_action, draft_text))
+        await self._persist_draft(
+            user_id=user_id,
+            email_id=email_id,
+            action_type=decision_action,
+            draft_text=draft_text,
+            to_address=email.from_address,
+            subject=subject,
+            thread_id=email.thread_id,
+            account_id=getattr(email, "account_id", None),
+        )
 
         return {
             "draft_text": draft_text,
@@ -73,7 +81,7 @@ Return ONLY the draft text. No JSON, no markdown, no explanation."""
             "model": response.model,
         }
 
-    def draft_forward(
+    async def draft_forward(
         self,
         user_id: str,
         email_id: str,
@@ -95,7 +103,7 @@ Original from: {email.from_address}
 
 Return ONLY the draft text."""
 
-        response = self.llm.route(prompt, complexity="complex")
+        response = await self.llm.route(prompt, complexity="complex")
         return {
             "draft_text": response.text.strip(),
             "subject": f"Fwd: {email.subject}",
@@ -105,7 +113,7 @@ Return ONLY the draft text."""
             "model": response.model,
         }
 
-    def edit_draft(self, card_id: str, edit_text: str) -> Dict[str, Any]:
+    async def edit_draft(self, card_id: str, edit_text: str) -> Dict[str, Any]:
         """Apply user edits to a draft. Returns updated draft."""
         prompt = f"""The user has edited their draft. Apply their changes and return the full updated draft.
 
@@ -113,7 +121,7 @@ User edit instruction: {edit_text}
 
 Return ONLY the updated draft text. Include "Subject: " line if applicable."""
 
-        response = self.llm.route(prompt, complexity="complex")
+        response = await self.llm.route(prompt, complexity="complex")
         draft_text = response.text.strip()
         subject = ""
         if draft_text.startswith("Subject:"):
@@ -144,10 +152,12 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
                 resp = await client.post(
                     f"{ingestion_url}/api/v1/send",
                     json={
-                        "to": decision.draft_text.split("\n")[0] if decision.draft_text else "",
-                        "subject": "Re: " + (decision.draft_text[:50] if decision.draft_text else ""),
-                        "body": decision.draft_text,
-                        "draft_id": str(draft_id),
+                        "user_id": decision.user_id,
+                        "to": decision.to_address or "",
+                        "subject": decision.subject or "",
+                        "body": decision.draft_text or "",
+                        "thread_id": decision.thread_id,
+                        "account_id": decision.account_id,
                     },
                 )
                 resp.raise_for_status()
@@ -162,7 +172,17 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    async def _persist_draft(self, user_id: str, email_id: str, action_type: str, draft_text: str):
+    async def _persist_draft(
+        self,
+        user_id: str,
+        email_id: str,
+        action_type: str,
+        draft_text: str,
+        to_address: Optional[str] = None,
+        subject: Optional[str] = None,
+        thread_id: Optional[str] = None,
+        account_id: Optional[str] = None,
+    ) -> None:
         async with db_session() as db:
             from datetime import datetime
             from intelligence.app.models import DecisionModel
@@ -172,6 +192,10 @@ Return ONLY the updated draft text. Include "Subject: " line if applicable."""
                 card_id=email_id,
                 action_type=action_type,
                 draft_text=draft_text,
+                to_address=to_address,
+                subject=subject,
+                thread_id=thread_id,
+                account_id=account_id,
                 created_at=datetime.utcnow(),
             )
             db.add(decision)

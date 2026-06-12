@@ -328,7 +328,7 @@ func TestStagingWindow_BulkFilter(t *testing.T) {
 
 	var eligible []models.AutoHandleRule
 	for _, r := range rules {
-		if r.Status == "staged" && r.StagedAt != nil && now.After(*r.StagedAt.Add(48*time.Hour)) {
+		if r.Status == "staged" && r.StagedAt != nil && now.After(r.StagedAt.Add(48*time.Hour)) {
 			eligible = append(eligible, r)
 		}
 	}

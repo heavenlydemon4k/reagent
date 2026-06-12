@@ -395,9 +395,9 @@ func TestExtract_SubjectIncluded(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestNormalizeInput_Truncation(t *testing.T) {
-	// Build a body longer than 2048 chars.
+	// Build a body longer than 2048 chars (410 * 5 = 2050 chars before the code).
 	var longBody string
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 410; i++ {
 		longBody += "word "
 	}
 	// Add a 2FA code at the very end (past 2048 chars).

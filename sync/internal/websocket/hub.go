@@ -63,22 +63,27 @@ type broadcastMsg struct {
 
 // NewHub creates a new WebSocket hub with the given configuration.
 func NewHub(cfg *config.Config, redisClient *redis.Redis, tokenValidator *auth.TokenValidator) *Hub {
-	upgrader := websocket.Upgrader{
-		ReadBufferSize:  cfg.WSReadBufferSize,
-		WriteBufferSize: cfg.WSWriteBufferSize,
-		CheckOrigin: func(r *http.Request) bool {
-			if cfg.IsDevelopment() {
-				return true
-			}
-			origin := r.Header.Get("Origin")
-			allowedOrigins := cfg.AllowedWSOrigins()
-			for _, allowed := range allowedOrigins {
-				if origin == allowed {
+	var upgrader websocket.Upgrader
+	var pongWait time.Duration
+	if cfg != nil {
+		upgrader = websocket.Upgrader{
+			ReadBufferSize:  cfg.WSReadBufferSize,
+			WriteBufferSize: cfg.WSWriteBufferSize,
+			CheckOrigin: func(r *http.Request) bool {
+				if cfg.IsDevelopment() {
 					return true
 				}
-			}
-			return false
-		},
+				origin := r.Header.Get("Origin")
+				allowedOrigins := cfg.AllowedWSOrigins()
+				for _, allowed := range allowedOrigins {
+					if origin == allowed {
+						return true
+					}
+				}
+				return false
+			},
+		}
+		pongWait = cfg.WSPongWait
 	}
 
 	return &Hub{
@@ -87,7 +92,7 @@ func NewHub(cfg *config.Config, redisClient *redis.Redis, tokenValidator *auth.T
 		register:       make(chan *Client, 100),
 		unregister:     make(chan *Client, 100),
 		broadcast:      make(chan broadcastMsg, 256),
-		pongWait:       cfg.WSPongWait,
+		pongWait:       pongWait,
 		redis:          redisClient,
 		tokenValidator: tokenValidator,
 		upgrader:       upgrader,
@@ -149,7 +154,9 @@ func (h *Hub) registerClient(client *Client) {
 			"device_id", client.deviceID,
 		)
 		close(existing.send)
-		existing.conn.Close()
+		if existing.conn != nil {
+			existing.conn.Close()
+		}
 	}
 
 	h.connections[client.userID][client.deviceID] = client
@@ -179,7 +186,9 @@ func (h *Hub) unregisterClient(client *Client) {
 		}
 	}
 
-	client.conn.Close()
+	if client.conn != nil {
+		client.conn.Close()
+	}
 }
 
 // findClient returns an existing client for the given (userID, deviceID) pair,
@@ -427,7 +436,9 @@ func (h *Hub) closeAll() {
 	for userID, devices := range h.connections {
 		for deviceID, client := range devices {
 			close(client.send)
-			client.conn.Close()
+			if client.conn != nil {
+				client.conn.Close()
+			}
 			delete(devices, deviceID)
 		}
 		delete(h.connections, userID)

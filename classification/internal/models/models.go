@@ -6,6 +6,8 @@ package models
 
 import (
 	"encoding/json"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -148,8 +150,18 @@ func (c Condition) match(attrs EmailAttributes) (bool, error) {
 	fieldVal := attrs.Get(c.Field)
 	switch c.Operator {
 	case "eq":
+		fs, fok := fieldVal.(string)
+		vs, vok := c.Value.(string)
+		if fok && vok {
+			return strings.EqualFold(fs, vs), nil
+		}
 		return fieldVal == c.Value, nil
 	case "ne":
+		fs, fok := fieldVal.(string)
+		vs, vok := c.Value.(string)
+		if fok && vok {
+			return !strings.EqualFold(fs, vs), nil
+		}
 		return fieldVal != c.Value, nil
 	case "contains":
 		s, ok := fieldVal.(string)
@@ -278,19 +290,49 @@ const (
 // ============================================================================
 
 func containsIgnoreCase(s, substr string) bool {
-	// Implementation in utils.go
-	return false // placeholder
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
 func matchRegex(s, pattern string) (bool, error) {
-	// Implementation in utils.go
-	return false, nil // placeholder
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return false, err
+	}
+	return re.MatchString(s), nil
 }
 
 func compareNumeric(a, b interface{}) int {
-	// Implementation in utils.go
-	return 0 // placeholder
+	toFloat := func(v interface{}) (float64, bool) {
+		switch n := v.(type) {
+		case int:
+			return float64(n), true
+		case int64:
+			return float64(n), true
+		case float64:
+			return n, true
+		case float32:
+			return float64(n), true
+		case json.Number:
+			f, err := n.Float64()
+			return f, err == nil
+		}
+		return 0, false
+	}
+	fa, aok := toFloat(a)
+	fb, bok := toFloat(b)
+	if !aok || !bok {
+		return 0
+	}
+	switch {
+	case fa > fb:
+		return 1
+	case fa < fb:
+		return -1
+	default:
+		return 0
+	}
 }
+
 
 func stringInSlice(s string, arr []string) bool {
 	for _, v := range arr {

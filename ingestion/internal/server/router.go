@@ -31,6 +31,7 @@ type Dependencies struct {
 	OAuthHandler   *oauth.Handler
 	HealthHandler  *health.Handler
 	NATSPublisher  nats.Publisher
+	SendHandler    *SendHandler
 }
 
 // NewRouter builds and returns the chi router with all middleware and routes
@@ -66,6 +67,11 @@ func NewRouter(cfg *config.Config, deps *Dependencies) *chi.Mux {
 	// can respond to probe traffic on /auth/*.
 	if deps.OAuthHandler != nil {
 		r.Mount("/auth", deps.OAuthHandler.Routes())
+	}
+
+	// ── Outbound send (called by Intelligence service) ───────────────────────
+	if deps.SendHandler != nil {
+		r.Post("/api/v1/send", deps.SendHandler.HandleSend)
 	}
 
 	// ── 404 catch-all ────────────────────────────────────────────────────────

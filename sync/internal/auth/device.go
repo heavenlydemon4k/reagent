@@ -72,6 +72,9 @@ func (dm *DeviceManager) Register(ctx context.Context, session *models.DeviceSes
 		"last_active_at": session.LastActiveAt,
 		"created_at":     session.CreatedAt,
 	}
+	if dm.store.db == nil {
+		return fmt.Errorf("auth: no database connection")
+	}
 	_, err := dm.store.db.NamedExecContext(ctx, query, params)
 	if err != nil {
 		return fmt.Errorf("auth: register device session: %w", err)

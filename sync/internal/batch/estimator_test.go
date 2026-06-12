@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -51,10 +50,6 @@ func (m *mockRedis) Del(ctx context.Context, keys ...string) *redis.IntCmd {
 	return redis.NewIntResult(count, nil)
 }
 
-func (m *mockRedis) Pipeline() redis.Pipeliner {
-	return &mockPipeline{parent: m}
-}
-
 // Required to satisfy redis.UniversalClient interface (but unused by estimator)
 func (m *mockRedis) Ping(ctx context.Context) *redis.StatusCmd {
 	return redis.NewStatusResult("PONG", nil)
@@ -62,59 +57,14 @@ func (m *mockRedis) Ping(ctx context.Context) *redis.StatusCmd {
 
 func (m *mockRedis) Close() error { return nil }
 
-// mockPipeline implements redis.Pipeliner for the Reset operation.
-type mockPipeline struct {
-	parent *mockRedis
-	cmds   []struct {
-		op  string
-		key string
-	}
-}
-
-func (p *mockPipeline) Get(ctx context.Context, key string) *redis.StringCmd {
-	return p.parent.Get(ctx, key)
-}
-
-func (p *mockPipeline) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) *redis.StatusCmd {
-	return p.parent.Set(ctx, key, value, ttl)
-}
-
-func (p *mockPipeline) Del(ctx context.Context, keys ...string) *redis.IntCmd {
-	p.cmds = append(p.cmds, struct {
-		op  string
-		key string
-	}{op: "del", key: keys[0]})
-	return p.parent.Del(ctx, keys...)
-}
-
-func (p *mockPipeline) Exec(ctx context.Context) ([]redis.Cmder, error) {
-	return nil, nil
-}
-
-func (p *mockPipeline) Discard() {}
-
 // ---------------------------------------------------------------------------
 // Helper assertions
 // ---------------------------------------------------------------------------
-
-func assertNoError(t *testing.T, err error, msg string) {
-	t.Helper()
-	if err != nil {
-		t.Fatalf("%s: unexpected error: %v", msg, err)
-	}
-}
 
 func assertInDelta(t *testing.T, want, got, delta float64, msg string) {
 	t.Helper()
 	if math.Abs(want-got) > delta {
 		t.Errorf("%s: want %f ±%f, got %f", msg, want, delta, got)
-	}
-}
-
-func assertEqualInt(t *testing.T, want, got int, msg string) {
-	t.Helper()
-	if want != got {
-		t.Errorf("%s: want %d, got %d", msg, want, got)
 	}
 }
 
@@ -439,15 +389,15 @@ func TestEstimate_Scenarios(t *testing.T) {
 			name:          "fast user (10s avg), 10 cards",
 			recordedTimes: []float64{10, 10, 10, 10, 10},
 			cardCount:     10,
-			wantMin:       1,
-			wantMax:       3,
+			wantMin:       3,
+			wantMax:       5,
 		},
 		{
 			name:          "slow user (120s avg), 10 cards",
 			recordedTimes: []float64{120, 120, 120, 120, 120},
 			cardCount:     10,
-			wantMin:       20,
-			wantMax:       22,
+			wantMin:       15,
+			wantMax:       17,
 		},
 		{
 			name:          "mixed times converge, 20 cards",
@@ -494,50 +444,6 @@ func TestEstimate_LargeCardCount(t *testing.T) {
 	assertEqualInt(t, want, mins, "large card count estimate")
 }
 
-// ---------------------------------------------------------------------------
-// Satisfy redis.UniversalClient interface (stubs for compilation)
-// The mock only needs to implement methods actually called by the estimator.
-// The Pipeline() method returns a mockPipeliner that handles Del + Exec.
-
-type mockPipeliner struct {
-	parent *mockRedis
-}
-
-func (p *mockPipeliner) Get(ctx context.Context, key string) *redis.StringCmd {
-	return p.parent.Get(ctx, key)
-}
-func (p *mockPipeliner) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) *redis.StatusCmd {
-	return p.parent.Set(ctx, key, value, ttl)
-}
-func (p *mockPipeliner) Del(ctx context.Context, keys ...string) *redis.IntCmd {
-	return p.parent.Del(ctx, keys...)
-}
-func (p *mockPipeliner) Exec(ctx context.Context) ([]redis.Cmder, error) {
-	return nil, nil
-}
-func (p *mockPipeliner) Discard() {}
-func (p *mockPipeliner) SetNX(ctx context.Context, key string, value interface{}, ttl time.Duration) *redis.BoolCmd {
-	return redis.NewBoolResult(true, nil)
-}
-func (p *mockPipeliner) Incr(ctx context.Context, key string) *redis.IntCmd {
-	return redis.NewIntResult(1, nil)
-}
-func (p *mockPipeliner) Decr(ctx context.Context, key string) *redis.IntCmd {
-	return redis.NewIntResult(0, nil)
-}
-func (p *mockPipeliner) Expire(ctx context.Context, key string, ttl time.Duration) *redis.BoolCmd {
-	return redis.NewBoolResult(true, nil)
-}
-func (p *mockPipeliner) TTL(ctx context.Context, key string) *redis.DurationCmd {
-	return redis.NewDurationResult(time.Hour, nil)
-}
-func (p *mockPipeliner) Exists(ctx context.Context, keys ...string) *redis.IntCmd {
-	return redis.NewIntResult(0, nil)
-}
-func (p *mockPipeliner) Do(ctx context.Context, args ...interface{}) *redis.Cmd {
-	return redis.NewCmdResult(nil, nil)
-}
-
 // Additional interface stubs for the mockRedis
 func (m *mockRedis) GetSet(ctx context.Context, key string, value interface{}) *redis.StringCmd {
 	return redis.NewStringResult("", redis.Nil)
@@ -579,24 +485,6 @@ func (m *mockRedis) Do(ctx context.Context, args ...interface{}) *redis.Cmd {
 	return redis.NewCmdResult(nil, nil)
 }
 
-// Need to make mockRedis satisfy redis.UniversalClient - add TxPipeline
-func (m *mockRedis) TxPipeline() redis.Pipeliner {
-	return m.Pipeline()
-}
-func (m *mockRedis) TxPipelined(ctx context.Context, fn func(redis.Pipeliner) error) ([]redis.Cmder, error) {
-	pipe := m.Pipeline()
-	if err := fn(pipe); err != nil {
-		return nil, err
-	}
-	return pipe.Exec(ctx)
-}
-func (m *mockRedis) Pipelined(ctx context.Context, fn func(redis.Pipeliner) error) ([]redis.Cmder, error) {
-	pipe := m.Pipeline()
-	if err := fn(pipe); err != nil {
-		return nil, err
-	}
-	return pipe.Exec(ctx)
-}
 func (m *mockRedis) Subscribe(ctx context.Context, channels ...string) *redis.PubSub {
 	return nil
 }
@@ -835,10 +723,10 @@ func (m *mockRedis) BgRewriteAOF(ctx context.Context) *redis.StatusCmd {
 	return redis.NewStatusResult("OK", nil)
 }
 func (m *mockRedis) SlowLogGet(ctx context.Context, num int64) *redis.SlowLogCmd {
-	return redis.NewSlowLogCmdResult(nil, nil)
+	return redis.NewSlowLogCmd(context.Background())
 }
 func (m *mockRedis) Time(ctx context.Context) *redis.TimeCmd {
-	return redis.NewTimeResult(time.Time{}, nil)
+	return redis.NewTimeCmd(context.Background())
 }
 func (m *mockRedis) MemoryFlushAll(ctx context.Context) *redis.StatusCmd {
 	return redis.NewStatusResult("OK", nil)

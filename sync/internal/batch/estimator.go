@@ -31,14 +31,21 @@ const (
 	MinSecondsPerCard = 5.0
 )
 
+// estimatorRedis is the minimal Redis interface the estimator requires.
+type estimatorRedis interface {
+	Get(ctx context.Context, key string) *redis.StringCmd
+	Set(ctx context.Context, key string, value interface{}, expiration time.Duration) *redis.StatusCmd
+	Del(ctx context.Context, keys ...string) *redis.IntCmd
+}
+
 // ClearTimeEstimator computes batch clear-time estimates using a per-user
 // exponential moving average (EMA) stored in Redis.
 type ClearTimeEstimator struct {
-	redis redis.UniversalClient
+	redis estimatorRedis
 }
 
 // NewClearTimeEstimator creates a new estimator backed by Redis.
-func NewClearTimeEstimator(redis redis.UniversalClient) *ClearTimeEstimator {
+func NewClearTimeEstimator(redis estimatorRedis) *ClearTimeEstimator {
 	return &ClearTimeEstimator{redis: redis}
 }
 
@@ -158,11 +165,7 @@ func (e *ClearTimeEstimator) getAverageSeconds(ctx context.Context, userID uuid.
 func (e *ClearTimeEstimator) Reset(ctx context.Context, userID uuid.UUID) error {
 	key := timingKey(userID)
 	lastKey := lastClearKey(userID)
-	pipe := e.redis.Pipeline()
-	pipe.Del(ctx, key)
-	pipe.Del(ctx, lastKey)
-	_, err := pipe.Exec(ctx)
-	if err != nil {
+	if err := e.redis.Del(ctx, key, lastKey).Err(); err != nil {
 		return fmt.Errorf("reset timing data: %w", err)
 	}
 	return nil

@@ -27,6 +27,9 @@ func NewCardStore(db *sqlx.DB) *CardStore {
 // Insert persists a new decision card. The card must have all required fields set.
 // Uses a transaction to insert the card and ensure the user_queues row exists.
 func (s *CardStore) Insert(ctx context.Context, card *models.DecisionCard) error {
+	if s.db == nil {
+		return fmt.Errorf("no database connection")
+	}
 	if card.ID == uuid.Nil {
 		card.ID = uuid.New()
 	}
@@ -87,6 +90,9 @@ func (s *CardStore) Insert(ctx context.Context, card *models.DecisionCard) error
 // GetPending returns pending decision cards for a user ordered by urgency_score
 // DESC, then created_at ASC. Returns at most limit cards (limit <= 0 means no limit).
 func (s *CardStore) GetPending(ctx context.Context, userID uuid.UUID, limit int) ([]models.DecisionCard, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("no database connection")
+	}
 	var cards []models.DecisionCard
 	query := `
 		SELECT *
@@ -162,6 +168,9 @@ func (s *CardStore) GetByID(ctx context.Context, cardID uuid.UUID) (*models.Deci
 
 // GetPendingCount returns the number of pending cards for a user.
 func (s *CardStore) GetPendingCount(ctx context.Context, userID uuid.UUID) (int, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("no database connection")
+	}
 	var count int
 	if err := s.db.GetContext(ctx, &count, `
 		SELECT COUNT(*) FROM decision_cards
@@ -174,6 +183,9 @@ func (s *CardStore) GetPendingCount(ctx context.Context, userID uuid.UUID) (int,
 
 // GetUrgentCount returns the number of pending cards with urgency_score >= threshold.
 func (s *CardStore) GetUrgentCount(ctx context.Context, userID uuid.UUID, threshold float64) (int, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("no database connection")
+	}
 	var count int
 	if err := s.db.GetContext(ctx, &count, `
 		SELECT COUNT(*) FROM decision_cards
@@ -191,6 +203,9 @@ func (s *CardStore) GetUrgentCount(ctx context.Context, userID uuid.UUID, thresh
 // IncrementServerVersion atomically increments the server_version for a user's
 // queue and returns the new version number. Creates the row if absent.
 func (s *CardStore) IncrementServerVersion(ctx context.Context, userID uuid.UUID) (int, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("no database connection")
+	}
 	now := time.Now().UTC()
 
 	var version int
@@ -271,6 +286,9 @@ func (s *CardStore) GetUserQueue(ctx context.Context, userID uuid.UUID) (*models
 // MarkCardSent updates a card's state to 'sent' and records the sent_at timestamp
 // within a transaction, also decrementing the user's pending count.
 func (s *CardStore) MarkCardSent(ctx context.Context, userID uuid.UUID, cardID uuid.UUID) error {
+	if s.db == nil {
+		return fmt.Errorf("no database connection")
+	}
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin tx for mark sent: %w", err)

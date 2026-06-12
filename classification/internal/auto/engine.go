@@ -356,15 +356,18 @@ func extractSubjectKeyword(subject string) string {
 		return subject
 	}
 
-	// Skip common prefixes.
+	// Skip common prefixes and stop words (checked after stripping trailing colon).
 	skipWords := map[string]bool{
-		"re:": true, "fw:": true, "fwd:": true, "the": true,
+		"re": true, "fw": true, "fwd": true, "aw": true, "wg": true,
+		"the": true, "a": true, "an": true, "is": true, "it": true,
+		"to": true, "for": true, "of": true, "in": true, "on": true,
+		"at": true, "by": true, "or": true, "and": true,
 	}
 
 	var keywords []string
 	for _, w := range words {
 		clean := strings.ToLower(strings.TrimSuffix(w, ":"))
-		if !skipWords[clean] && len(clean) > 2 {
+		if !skipWords[clean] && len(clean) > 4 {
 			keywords = append(keywords, clean)
 			if len(keywords) >= 2 {
 				break

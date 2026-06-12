@@ -49,6 +49,9 @@ type SyncLogEntry struct {
 
 // LogChange records a single accepted or rejected change to the sync_log.
 func (s *SyncStore) LogChange(ctx context.Context, entry *SyncLogEntry) error {
+	if s.db == nil {
+		return fmt.Errorf("no database connection")
+	}
 	if entry.ID == uuid.Nil {
 		entry.ID = uuid.New()
 	}
@@ -123,6 +126,9 @@ func (s *SyncStore) LogSessionStart(ctx context.Context, userID uuid.UUID, devic
 // GetCardByID retrieves a card by ID. Returns sql.ErrNoRows equivalent if
 // the card does not exist.
 func (s *SyncStore) GetCardByID(ctx context.Context, cardID uuid.UUID) (*models.DecisionCard, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("no database connection")
+	}
 	var card models.DecisionCard
 	query := `
 		SELECT id, user_id, thread_id, source_account_id, card_state,
@@ -144,6 +150,9 @@ func (s *SyncStore) GetCardByID(ctx context.Context, cardID uuid.UUID) (*models.
 
 // GetCardOwnedBy retrieves a card by ID and verifies it belongs to the user.
 func (s *SyncStore) GetCardOwnedBy(ctx context.Context, cardID, userID uuid.UUID) (*models.DecisionCard, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("no database connection")
+	}
 	var card models.DecisionCard
 	query := `
 		SELECT id, user_id, thread_id, source_account_id, card_state,
@@ -165,6 +174,9 @@ func (s *SyncStore) GetCardOwnedBy(ctx context.Context, cardID, userID uuid.UUID
 
 // UpdateCardState atomically updates a card's state and bumps its server_version.
 func (s *SyncStore) UpdateCardState(ctx context.Context, cardID uuid.UUID, newState string) error {
+	if s.db == nil {
+		return fmt.Errorf("no database connection")
+	}
 	validStates := map[string]bool{
 		"pending":    true,
 		"consulting": true,
@@ -214,6 +226,9 @@ func (s *SyncStore) UpdateCardStateTx(ctx context.Context, tx *sqlx.Tx, cardID u
 
 // MarkCardApproved atomically marks a card as approved and records the decision time.
 func (s *SyncStore) MarkCardApproved(ctx context.Context, cardID uuid.UUID) error {
+	if s.db == nil {
+		return fmt.Errorf("no database connection")
+	}
 	query := `
 		UPDATE decision_cards
 		SET card_state = 'approved',
@@ -260,6 +275,9 @@ func (s *SyncStore) MarkCardApprovedTx(ctx context.Context, tx *sqlx.Tx, cardID 
 
 // GetDraftByID retrieves a draft by ID.
 func (s *SyncStore) GetDraftByID(ctx context.Context, draftID uuid.UUID) (*models.Draft, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("no database connection")
+	}
 	var draft models.Draft
 	query := `
 		SELECT id, card_id, user_id, thread_id, draft_body, subject_line,
@@ -279,6 +297,9 @@ func (s *SyncStore) GetDraftByID(ctx context.Context, draftID uuid.UUID) (*model
 
 // ApproveDraft marks a draft as user-approved.
 func (s *SyncStore) ApproveDraft(ctx context.Context, draftID uuid.UUID) error {
+	if s.db == nil {
+		return fmt.Errorf("no database connection")
+	}
 	query := `
 		UPDATE drafts
 		SET user_approved = true, updated_at = $1
@@ -315,6 +336,9 @@ func (s *SyncStore) ApproveDraftTx(ctx context.Context, tx *sqlx.Tx, draftID uui
 
 // GetLatestDraftForCard returns the most recent draft for a card.
 func (s *SyncStore) GetLatestDraftForCard(ctx context.Context, cardID uuid.UUID) (*models.Draft, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("no database connection")
+	}
 	var draft models.Draft
 	query := `
 		SELECT id, card_id, user_id, thread_id, draft_body, subject_line,
@@ -341,6 +365,9 @@ func (s *SyncStore) GetLatestDraftForCard(ctx context.Context, cardID uuid.UUID)
 // WithTx executes a function within a database transaction.
 // Automatically rolls back on error, commits on success.
 func (s *SyncStore) WithTx(ctx context.Context, fn func(*sqlx.Tx) error) error {
+	if s.db == nil {
+		return fmt.Errorf("no database connection")
+	}
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)

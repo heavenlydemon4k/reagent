@@ -1,0 +1,21 @@
+# Normalize line endings to LF on commit so the real diff is not buried under
+# CRLF churn. This makes the ~41 genuinely-changed files visible against the
+# ~530 files that only differ by line endings.
+* text=auto eol=lf
+
+# Keep binary assets untouched.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+
+# Scripts that must retain CRLF / LF respectively.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sh text eol=lf

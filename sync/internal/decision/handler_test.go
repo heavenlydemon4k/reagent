@@ -575,21 +575,16 @@ func TestSend_Success(t *testing.T) {
 	uid := uuid.New()
 	draftID := uuid.New()
 
-	mp := &mockProcessor{}
 	log := slog.New(slog.NewTextHandler(bytes.NewBuffer(nil), &slog.HandlerOptions{Level: slog.LevelError}))
 
 	// Create handler with mock approval flow
 	approvalFlow := NewApprovalFlow(nil, nil, nil, log)
 	h := &Handler{
-		processor: &DecisionProcessor{
+		processor: &mockProcessorFull{
 			approvalFlow: approvalFlow,
 		},
 		meshClient: &mockMeshClient{},
 		log:        log,
-	}
-	// Override with a processor that won't nil-deref
-	h.processor = &mockProcessorFull{
-		approvalFlow: approvalFlow,
 	}
 
 	body := `{"draft_id":"` + draftID.String() + `"}`

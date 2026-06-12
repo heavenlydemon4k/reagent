@@ -109,6 +109,7 @@ func (r *Router) Route(ctx context.Context, event *models.EmailIngestedEvent) (*
 		logger.Warn("auto stage failed", "error", err)
 	} else if handled && result != nil {
 		// An active auto-handle rule fired.
+		result.ProcessedAt = time.Now().UTC()
 		r.metrics.RecordClassification("auto")
 		r.metrics.ObserveClassification(time.Since(start).Seconds())
 		r.metrics.RecordAutoHandleAction(string(result.Route))

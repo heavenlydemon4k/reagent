@@ -396,10 +396,10 @@ func NewTokenManager(secret []byte, accessTTL, refreshTTL time.Duration) *TokenM
 	if len(secret) == 0 {
 		panic("secret must not be empty")
 	}
-	if accessTTL <= 0 {
+	if accessTTL == 0 {
 		accessTTL = 24 * time.Hour
 	}
-	if refreshTTL <= 0 {
+	if refreshTTL == 0 {
 		refreshTTL = 30 * 24 * time.Hour
 	}
 	return &TokenManager{
@@ -434,6 +434,9 @@ func (tm *TokenManager) GenerateAccessToken(userID uuid.UUID, deviceID string) (
 func (tm *TokenManager) ValidateAccessToken(tokenStr string) (uuid.UUID, string, error) {
 	if tokenStr == "" {
 		return uuid.Nil, "", fmt.Errorf("token is empty")
+	}
+	if strings.Count(tokenStr, ".") != 2 {
+		return uuid.Nil, "", fmt.Errorf("token is not access token: not access (wrong format)")
 	}
 	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -496,13 +499,31 @@ func (tm *TokenManager) ValidateRefreshToken(tokenStr string) (uuid.UUID, string
 	if tokenStr == "" {
 		return uuid.Nil, "", fmt.Errorf("token is empty")
 	}
-	// Split into envelope and opaque parts.
-	lastDot := strings.LastIndex(tokenStr, ".")
-	if lastDot == -1 {
+	dotCount := strings.Count(tokenStr, ".")
+	if dotCount < 3 {
+		// May be a plain JWT — try to detect access token for better error message.
+		if dotCount == 2 {
+			t, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (interface{}, error) {
+				return tm.secret, nil
+			})
+			if err == nil {
+				if c, ok := t.Claims.(*Claims); ok && c.TokenUse == "access" {
+					return uuid.Nil, "", fmt.Errorf("token use is not refresh: token is an access token")
+				}
+			}
+		}
 		return uuid.Nil, "", fmt.Errorf("refresh token has no separator")
 	}
+	// Split into envelope and opaque parts.
+	lastDot := strings.LastIndex(tokenStr, ".")
 	envelope := tokenStr[:lastDot]
 	opaque := tokenStr[lastDot+1:]
+
+	// Verify opaque is a valid 32-byte base64-encoded value.
+	decoded, err := base64.RawURLEncoding.DecodeString(opaque)
+	if err != nil || len(decoded) != 32 {
+		return uuid.Nil, "", fmt.Errorf("refresh token has invalid opaque portion")
+	}
 
 	token, err := jwt.ParseWithClaims(envelope, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -519,10 +540,6 @@ func (tm *TokenManager) ValidateRefreshToken(tokenStr string) (uuid.UUID, string
 	}
 	if claims.TokenUse != "refresh" {
 		return uuid.Nil, "", fmt.Errorf("token use is %q, not refresh", claims.TokenUse)
-	}
-	// Verify opaque portion is present.
-	if opaque == "" {
-		return uuid.Nil, "", fmt.Errorf("refresh token has no opaque portion")
 	}
 	uid, err := uuid.Parse(claims.UserID)
 	if err != nil {

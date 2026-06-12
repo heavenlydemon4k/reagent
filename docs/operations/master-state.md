@@ -2,15 +2,15 @@
 
 ## System Overview
 
-Reagent is an AI-native email agent. It ingests email from Gmail/Outlook, classifies each message, and routes it to either autonomous handling or a user-facing decision stack. The user interacts with the agent through a persistent chatroom where the agent is always present. Critical emails surface as inline cards during scheduled sessions. The user can verify the source of any AI context, preview drafts before sending, and continue or pause sessions at will.
+Reagent is an AI-native email agent. It ingests email from Gmail/Outlook, classifies each message, and routes it to either autonomous handling or a user-facing decision stack. The user interacts with Bizzy through a persistent chatroom where Bizzy is always present. Critical emails surface as inline cards during scheduled sessions. The user can verify the source of any AI context, preview drafts before sending, and continue or pause sessions at will.
 
 ## Core Concepts
 
 - **Chatroom**: The primary UI. A single window where free-form chat and decision cards coexist. The chat input is always available.
 - **Decision Stack**: A queue of critical emails requiring human judgment. Cards are rendered inline in the chat stream. Sessions process the stack sequentially.
-- **Autonomous Mode**: The agent handles generic emails (organize, label, archive, draft routine replies) without user intervention.
-- **Source Verification**: Every AI message referencing an email carries a `source_email_id`. The user can fetch and view the original email inline.
-- **Session**: A bounded decision-making period. The user starts or resumes a session; the agent presents cards one by one until the stack is empty or the user pauses.
+- **Autonomous Mode**: Bizzy handles generic emails (organize, label, archive, draft routine replies) without user intervention.
+- **Source Verification**: Every Bizzy message referencing an email carries a `source_email_id`. The user can fetch and view the original email inline.
+- **Session**: A bounded decision-making period. The user starts or resumes a session; Bizzy presents cards one by one until the stack is empty or the user pauses.
 
 ## Service Boundaries
 
@@ -23,22 +23,24 @@ Reagent is an AI-native email agent. It ingests email from Gmail/Outlook, classi
 - **Send**: Outbound SMTP/API send with draft preview pipeline.
 
 ### Classification (Go)
-- **Tri-state routing**:
-  - `auto`: Agent handles autonomously. No user interrupt.
-  - `stack`: Creates a decision card in the user's stack.
-  - `notify`: Urgent interrupt (rare — true emergencies).
+- **Four-state routing** (three currently implemented):
+  - `auto`: Bizzy handles autonomously. No user interrupt.
+  - `stack` (code: `decision`): Creates a decision card in the user's stack.
+  - `extract`: Routes to the extraction pipeline for structured data (2FA codes, OTP, tracking numbers, bank alerts). Email is archived after extraction. No user decision required.
+  - `notify`: *Planned — not yet implemented.* Urgent interrupt for true emergencies. Distinct from `extract`.
 - **Rules engine**: User-defined filters + ML scoring.
 - **Staging**: Extract-only mode for sensitive domains.
 
 ### Intelligence (Python)
-- **Chat engine**: LLM with access to email knowledgebase (Qdrant semantic search + Neo4j graph queries).
-- **Card generator**: Converts critical emails into structured decision cards.
+- **Chat engine**: LLM with access to email knowledgebase (Qdrant semantic search + Neo4j graph queries). Receives email events via NATS `intelligence.compress` (not `email.classified`).
+- **Card generator**: Converts critical emails into structured decision cards. Cards output a `question` string — no `options` arrays. See design decisions.
 - **Drafting engine**: Generates replies based on user decision + email thread context.
 - **Calendar context**: Reads availability before suggesting meeting times.
 - **System prompt injection**: User profile (tone, name, suffix) modifies agent behavior.
+- **Output delivery**: Cards and messages published to NATS `sync.broadcast` → Sync hub → client WebSocket. Intelligence holds no persistent client connections.
 
 ### Sync (Go)
-- **WebSocket hub**: Manages client connections, broadcasts messages/cards/typing indicators.
+- **WebSocket hub**: Manages client connections, broadcasts messages/cards/typing indicators. Sync is the sole client-facing WebSocket endpoint. Intelligence delivers cards and messages to clients via NATS `sync.broadcast` → Sync hub (not direct WebSocket).
 - **CRDT merge**: Resolves state between client and server for session progress.
 - **Auth**: JWT access tokens, refresh rotation, encrypted storage.
 - **Source API**: `/emails/{id}/source` returns original email for verification.
@@ -48,7 +50,7 @@ Reagent is an AI-native email agent. It ingests email from Gmail/Outlook, classi
 - **Chatroom**: Persistent message list. Text + card messages inline.
 - **Decision Stack UI**: Cards appear as message bubbles with action buttons.
 - **Inbox Viewer**: Traditional list view for browsing. Emails can be dragged into chat.
-- **Profile Drawer**: Agent name, tone, suffix, preferences.
+- **Profile Drawer**: Bizzy, tone, suffix, preferences.
 - **Preview Modal**: Before-send draft review with source email attached.
 
 ## Data Model
@@ -93,7 +95,7 @@ Reagent is an AI-native email agent. It ingests email from Gmail/Outlook, classi
 | PUT | /decisions/{id}/edit | Yes | Edit draft before send |
 
 ### WebSocket
-Connect to `/ws` with Bearer token.
+Connect to Sync (`:8082`) at `/ws` with Bearer token. Intelligence's `/chat/ws` endpoint is internal-only and deprecated.
 
 **Client → Server**
 ```json
@@ -115,17 +117,19 @@ Connect to `/ws` with Bearer token.
 {"type": "error", "message": "..."}
 ```
 
-## Agent Behavior
+## Bizzy Behavior
 
-**Design decision: no agent personality.** The system prompt contains no name, tone, or greeting. The agent is a tool, not a companion. `agent_name` and `agent_tone` do not exist anywhere in the codebase.
+**Design decision: professional and capable tone.** Bizzy is direct, competent, and unadorned — built for someone with a living inbox, not someone who needs encouragement. No affirmations ("Great question!"), no filler phrases ("I'd be happy to help"), no relentless positivity. Surface facts, ask the right question, get out of the way. `agent_tone` softness fields do not exist in the codebase.
 
-### System Prompt (neutral)
+### System Prompt
 ```
-You are an email agent. You have access to the user's email knowledgebase. You can:
+You are Bizzy, an email agent. You have access to the user's email knowledgebase. You can:
 - Answer questions about their inbox.
 - Organize emails autonomously (label, archive, draft routine replies).
 - Present critical emails as decision cards when the user is in a session.
 - Draft responses for user approval before sending.
+
+Tone: professional and capable. Direct. No affirmations, no filler, no fake warmth. The user has a living inbox — surface facts, ask the right question, move on.
 
 When referencing an email, always include the source_email_id.
 When the user makes a decision on a card, draft the response and present it for review before sending.

@@ -30,11 +30,13 @@ type CompiledPattern struct {
 // Priority scale: 10 (highest, deterministic 2FA) → 7 (receipt) → 5 (calendar MIME).
 var Patterns = []Pattern{
 	// ── 2FA / OTP (Priority 10 — deterministic, user-blocking) ──────────────
+	// Longer digit patterns declared first so they win over shorter ones on ties.
+	{Name: "2fa_8digit", Regex: `(?i)(?:code|verify|verification|otp|token|pin)[^\d]{0,20}(\d{8})`, Type: Type2FA, Priority: 10},
 	{Name: "2fa_6digit", Regex: `(?i)(?:code|verify|verification|otp|token|pin)[^\d]{0,20}(\d{6})`, Type: Type2FA, Priority: 10},
 	{Name: "2fa_5digit", Regex: `(?i)(?:code|verify|verification|otp|token|pin)[^\d]{0,20}(\d{5})`, Type: Type2FA, Priority: 10},
 	{Name: "2fa_4digit", Regex: `(?i)(?:code|verify|verification|otp|token|pin)[^\d]{0,20}(\d{4})`, Type: Type2FA, Priority: 10},
-	{Name: "2fa_8digit", Regex: `(?i)(?:code|verify|verification|otp|token|pin)[^\d]{0,20}(\d{8})`, Type: Type2FA, Priority: 10},
-	{Name: "2fa_alpha_numeric", Regex: `(?i)(?:code|verify|verification|otp|token|pin)[^\w]{0,20}([A-Z0-9]{4,8})`, Type: Type2FA, Priority: 10},
+	// Gap uses [^A-Z0-9\n]{0,30} (case-sensitive) so lowercase prose like "is" is consumed by the gap.
+	{Name: "2fa_alpha_numeric", Regex: `(?i:(?:code|verify|verification|otp|token|pin))[^A-Z0-9\n]{0,30}([A-Z0-9]{4,8})\b`, Type: Type2FA, Priority: 10},
 
 	// ── Tracking numbers (Priority 8 — carrier-specific) ────────────────────
 	{Name: "ups_tracking", Regex: `\b(1Z[0-9A-Z]{16})\b`, Type: TypeTracking, Priority: 8},

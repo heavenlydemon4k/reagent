@@ -1,6 +1,6 @@
 # Reagent
 
-> A persistent executive agent that lives inside your email. It reads, contextualizes, and organizes every incoming message while you are away. When you choose to engage, it presents structured decision cards in a chat interface, asks the specific questions required to resolve each item, and turns your spoken or typed reactions into natural drafts. You review and send. The agent never acts autonomously on your behalf.
+> A persistent executive agent that lives inside your email. Bizzy reads, contextualizes, and organizes every incoming message while you are away. When you choose to engage, Bizzy presents structured decision cards in a chat interface, asks the specific questions required to resolve each item, and turns your spoken or typed reactions into natural drafts. You review and send. Bizzy never acts autonomously on your behalf.
 
 ---
 
@@ -8,13 +8,13 @@
 
 Reagent is not an email client. It is a digital employee that replaces the workflow of email, not the interface. It is designed for knowledge workers who spend 10+ hours per week on email and do not have an executive assistant.
 
-The core loop is a **one-minute back-and-forth**: the agent presents context and asks a question; you respond via voice or text; the agent drafts; you review and send. The agent handles the reading, the context-gathering, the blank-page composition, and the organizational overhead. What remains is the human work: deciding what you want to say, and saying it.
+The core loop is a **one-minute back-and-forth**: Bizzy presents context and asks a question; you respond via voice or text; Bizzy drafts; you review and send. Bizzy handles the reading, the context-gathering, the blank-page composition, and the organizational overhead. What remains is the human work: deciding what you want to say, and saying it.
 
 **Key principles:**
-- **Human judgment, machine execution.** The agent drafts; you always send.
-- **Visit, don't monitor.** The agent works continuously. You visit it when you choose.
+- **Human judgment, machine execution.** Bizzy drafts; you always send.
+- **Visit, don't monitor.** Bizzy works continuously. You visit when you choose.
 - **Structured density.** No personality theater. Every word earns its place.
-- **Persistent memory.** The agent maintains its own knowledge files about your contacts, projects, and voice.
+- **Persistent memory.** Bizzy maintains its own knowledge files about your contacts, projects, and voice.
 
 ---
 
@@ -47,22 +47,22 @@ Gmail/Outlook APIs
 ## Core Flows
 
 ### 1. Always-On Chat
-User opens app → WebSocket connects → Agent is present. User asks anything. Agent queries the email knowledgebase (Qdrant vector store + Neo4j graph) and responds with free text or structured cards.
+User opens app → WebSocket connects → Bizzy is present. User asks anything. Bizzy queries the email knowledgebase (Qdrant vector store + Neo4j graph) and responds with free text or structured cards.
 
 ### 2. Critical Email Stack
 1. Ingestion receives email → Classification scores it critical.
 2. Intelligence creates a decision card and stores it in the stack.
 3. At the user's scheduled session time, the card appears in chat as an inline message.
-4. User responds conversationally (voice or text) to the agent's prompt.
+4. User responds conversationally (voice or text) to Bizzy's prompt.
 5. AI drafts response → Preview shown with `[Source]` button linking to original email.
 6. User approves or edits → AI sends via Ingestion send API.
 7. Next card in the stack appears automatically.
 
 ### 3. Source Verification
-Every agent message that references an email carries `source_email_id`. Clicking `[Source]` fetches the original email from the Sync API and renders it as a collapsible message block. The user can verify context before any decision.
+Every Bizzy message that references an email carries `source_email_id`. Clicking `[Source]` fetches the original email from the Sync API and renders it as a collapsible message block. The user can verify context before any decision.
 
 ### 4. Inbox Viewer
-The user can leave the chat and visit a traditional inbox view. The agent's organizational actions (labels, archives) are visible here. The user can drag any email into the chat to discuss it.
+The user can leave the chat and visit a traditional inbox view. Bizzy's organizational actions (labels, archives) are visible here. The user can drag any email into the chat to discuss it.
 
 ---
 
@@ -90,8 +90,8 @@ The canonical implementation plan is in [PLAN.md](PLAN.md). The phases below ref
 | Decision | Implication |
 |----------|-------------|
 | **Conversational cards, not button-driven** | Card generator outputs a `question` string. User's typed or spoken response is the decision. No button arrays. |
-| **Agent never sends without human gate** | Preview card with [Send] is mandatory before any outbound email. No auto-send threshold exists. |
-| **No agent personality** | System prompt contains no name, greeting, or tone. No `agent_name` or `agent_tone` fields anywhere. Tool, not companion. |
+| **Bizzy never sends without human gate** | Preview card with [Send] is mandatory before any outbound email. No auto-send threshold exists. |
+| **Bizzy's tone: professional and capable** | Direct, unadorned, competent. No fake warmth, no relentless positivity — a raw operator for someone with a living inbox. No affirmations, no filler. |
 | **Event-driven, not synchronous** | LLM calls are slow. Cards accumulate in a batch queue. User visits on their schedule. |
 | **Read-only calendar default** | Calendar writes require explicit user confirmation. Calendar service exposes read endpoints; write is gated. |
 | **Contact dedup never auto-merges** | Fuzzy matches create `SIMILAR_TO` edges in Neo4j. No automatic merge. Manual review only. |

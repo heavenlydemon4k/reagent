@@ -1,8 +1,8 @@
 """Unified LLM client. Direct HTTP calls to OpenAI and Anthropic."""
 
+import asyncio
 import json
 import os
-import time
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -19,6 +19,10 @@ class GenerationResult:
     meter: MeterResult
     raw_response: dict
 
+    @property
+    def tokens_used(self) -> int:
+        return self.meter.total_tokens
+
 
 class LLMClient:
     """Make real API calls. No stubs. Retries on 429. Mock mode for testing."""
@@ -26,10 +30,10 @@ class LLMClient:
     def __init__(self, config: Optional[LLMConfig] = None, mock_mode: bool = False) -> None:
         self.cfg = config or LLMConfig()
         self.meter = TokenMeter()
-        self._client = httpx.Client(timeout=self.cfg.timeout_seconds)
+        self._client = httpx.AsyncClient(timeout=self.cfg.timeout_seconds)
         self._mock_mode = mock_mode
     
-    def generate(
+    async def generate(
         self,
         prompt: str,
         model: Optional[str] = None,
@@ -41,22 +45,22 @@ class LLMClient:
         """Generate text. Auto-detects provider from model name. Retries on 429."""
         if self._mock_mode:
             return self._mock_generate(prompt, model or self.cfg.complex_model)
-        
+
         target_model = model or self.cfg.complex_model
-        
+
         last_error = None
         for attempt in range(retries):
             try:
                 if target_model.startswith("claude"):
-                    return self._call_anthropic(target_model, prompt, system, temperature, max_tokens)
+                    return await self._call_anthropic(target_model, prompt, system, temperature, max_tokens)
                 else:
-                    return self._call_openai(target_model, prompt, system, temperature, max_tokens)
+                    return await self._call_openai(target_model, prompt, system, temperature, max_tokens)
             except httpx.HTTPStatusError as e:
                 last_error = e
                 if e.response.status_code == 429:
                     wait = 2 ** attempt
                     print(f"Rate limited. Waiting {wait}s... (attempt {attempt + 1}/{retries})")
-                    time.sleep(wait)
+                    await asyncio.sleep(wait)
                     continue
                 raise
         raise last_error
@@ -79,7 +83,7 @@ class LLMClient:
             raw_response={"mock": True, "prompt": prompt[:100]},
         )
     
-    def _call_openai(
+    async def _call_openai(
         self,
         model: str,
         prompt: str,
@@ -108,7 +112,7 @@ class LLMClient:
         }
         
         url = f"{self.cfg.openai_base_url}/chat/completions"
-        resp = self._client.post(url, headers=headers, json=body)
+        resp = await self._client.post(url, headers=headers, json=body)
         resp.raise_for_status()
         
         data = resp.json()
@@ -129,7 +133,7 @@ class LLMClient:
             raw_response=data,
         )
     
-    def _call_anthropic(
+    async def _call_anthropic(
         self,
         model: str,
         prompt: str,
@@ -156,7 +160,7 @@ class LLMClient:
             body["system"] = system
         
         url = f"{self.cfg.anthropic_base_url}/messages"
-        resp = self._client.post(url, headers=headers, json=body)
+        resp = await self._client.post(url, headers=headers, json=body)
         resp.raise_for_status()
         
         data = resp.json()
@@ -176,11 +180,11 @@ class LLMClient:
             raw_response=data,
         )
     
-    def close(self) -> None:
-        self._client.close()
-    
-    def __enter__(self) -> "LLMClient":
+    async def close(self) -> None:
+        await self._client.aclose()
+
+    async def __aenter__(self) -> "LLMClient":
         return self
-    
-    def __exit__(self, *args: Any) -> None:
-        self.close()
+
+    async def __aexit__(self, *args: Any) -> None:
+        await self.close()

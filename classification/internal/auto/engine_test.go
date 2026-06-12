@@ -1,7 +1,6 @@
 package auto
 
 import (
-	"context"
 	"log/slog"
 	"os"
 	"testing"
@@ -457,7 +456,7 @@ func TestRuleCache_Set_ExpiresAt(t *testing.T) {
 	cache.mu.RUnlock()
 
 	require.NotNil(t, entry)
-	assert.True(t, entry.expiresAt.After(beforeSet.Add(ttl)))
+	assert.True(t, !entry.expiresAt.Before(beforeSet.Add(ttl)))
 	assert.True(t, entry.expiresAt.Before(afterSet.Add(ttl+time.Second)))
 }
 

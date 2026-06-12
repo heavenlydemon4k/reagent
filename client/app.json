@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Decision Stack",
-    "slug": "decisionstack",
+    "name": "Bizzy",
+    "slug": "bizzy",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,18 +16,18 @@
     ],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.decisionstack.app",
+      "bundleIdentifier": "com.bizzy.app",
       "buildNumber": "1.0.0",
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Unlock your encrypted decision database",
+        "NSFaceIDUsageDescription": "Unlock your encrypted inbox data",
         "UIBackgroundModes": [
           "fetch",
           "processing",
           "remote-notification"
         ],
         "BGTaskSchedulerPermittedIdentifiers": [
-          "com.decisionstack.sync",
-          "com.decisionstack.background-fetch"
+          "com.bizzy.sync",
+          "com.bizzy.background-fetch"
         ]
       },
       "config": {
@@ -35,7 +35,7 @@
       }
     },
     "android": {
-      "package": "com.decisionstack.app",
+      "package": "com.bizzy.app",
       "versionCode": 1,
       "permissions": [
         "android.permission.RECEIVE_BOOT_COMPLETED",
@@ -52,7 +52,7 @@
       [
         "expo-secure-store",
         {
-          "faceIDPermission": "Allow Decision Stack to access your secure store to encrypt local data."
+          "faceIDPermission": "Allow Bizzy to access your secure store to encrypt local data."
         }
       ],
       [
@@ -72,7 +72,7 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "decisionstack-client"
+        "projectId": "bizzy-client"
       }
     }
   }

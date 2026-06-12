@@ -9,27 +9,6 @@ import (
 // Helper assertions
 // ---------------------------------------------------------------------------
 
-func assertEqualString(t *testing.T, want, got, msg string) {
-	t.Helper()
-	if want != got {
-		t.Errorf("%s: want %q, got %q", msg, want, got)
-	}
-}
-
-func assertTrue(t *testing.T, cond bool, msg string) {
-	t.Helper()
-	if !cond {
-		t.Errorf("%s: expected true", msg)
-	}
-}
-
-func assertFalse(t *testing.T, cond bool, msg string) {
-	t.Helper()
-	if cond {
-		t.Errorf("%s: expected false", msg)
-	}
-}
-
 func assertEqualWinner(t *testing.T, want, got Winner, msg string) {
 	t.Helper()
 	if want != got {

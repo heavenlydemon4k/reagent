@@ -17,19 +17,35 @@ import (
 // Handler — HTTP handlers for decision endpoints
 // ---------------------------------------------------------------------------
 
+// Processor is the interface satisfied by DecisionProcessor (and mocks in tests).
+type Processor interface {
+	ProcessDecision(ctx context.Context, userID, cardID uuid.UUID, decision string, input *string) (*models.DecideResponse, error)
+	ProcessDraftModification(ctx context.Context, userID, cardID uuid.UUID, instruction string) (*models.DecideResponse, error)
+	ProcessConsultation(ctx context.Context, userID uuid.UUID, req *models.ConsultRequest) (*models.ConsultResponse, error)
+	ProcessEdit(ctx context.Context, userID, draftID uuid.UUID, body string) (*models.DecideResponse, error)
+	ProcessApproval(ctx context.Context, userID, draftID uuid.UUID) error
+	GetSourceCitations(ctx context.Context, userID, cardID uuid.UUID) ([]models.ChunkCitation, error)
+}
+
 // Handler holds all HTTP handlers for the decision API.
 type Handler struct {
-	processor    *DecisionProcessor
+	processor    Processor
+	approvalFlow *ApprovalFlow
 	meshClient   IngestionMeshClient
 	log          *slog.Logger
 }
 
 // NewHandler creates a new Handler.
-func NewHandler(processor *DecisionProcessor, meshClient IngestionMeshClient, log *slog.Logger) *Handler {
+// When processor is a *DecisionProcessor its approvalFlow is used automatically.
+func NewHandler(processor Processor, meshClient IngestionMeshClient, log *slog.Logger) *Handler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Handler{processor: processor, meshClient: meshClient, log: log}
+	h := &Handler{processor: processor, meshClient: meshClient, log: log}
+	if dp, ok := processor.(*DecisionProcessor); ok && dp != nil {
+		h.approvalFlow = dp.approvalFlow
+	}
+	return h
 }
 
 // Routes registers all decision routes on the given router.
@@ -192,8 +208,6 @@ func (h *Handler) Decide(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusNotFound, models.ErrCodeCardNotFound, e.Error(), false)
 		case ErrCardOwnership:
 			writeError(w, http.StatusForbidden, "forbidden", e.Error(), false)
-		case ErrInvalidDecision:
-			writeError(w, http.StatusBadRequest, "invalid_decision", e.Error(), false)
 		default:
 			h.log.Error("process decision failed", "error", err, "card_id", cardID)
 			writeError(w, http.StatusInternalServerError, "internal_error",
@@ -517,7 +531,11 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 	h.log.Info("send request", "draft_id", body.DraftID, "user_id", userID)
 
 	// Execute send via the approval flow's direct send path
-	result, err := h.processor.approvalFlow.ExecuteSend(ctx, h.meshClient, body.DraftID, userID)
+	if h.approvalFlow == nil {
+		writeError(w, http.StatusInternalServerError, "server_error", "approval flow not configured", false)
+		return
+	}
+	result, err := h.approvalFlow.ExecuteSend(ctx, h.meshClient, body.DraftID, userID)
 	if err != nil {
 		switch e := err.(type) {
 		case ErrDraftNotFound:

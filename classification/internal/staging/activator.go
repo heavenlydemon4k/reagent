@@ -24,6 +24,9 @@ type Activator struct {
 
 // NewActivator creates an Activator.
 func NewActivator(db *sql.DB, notifier *Notifier, log *slog.Logger) *Activator {
+	if log == nil {
+		log = slog.Default()
+	}
 	return &Activator{
 		db:       db,
 		notifier: notifier,

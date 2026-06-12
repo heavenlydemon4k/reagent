@@ -41,6 +41,9 @@ func NewStagingCron(db *sql.DB, activator *Activator, interval time.Duration, lo
 	if interval <= 0 {
 		interval = defaultInterval
 	}
+	if log == nil {
+		log = slog.Default()
+	}
 	return &StagingCron{
 		db:        db,
 		activator: activator,

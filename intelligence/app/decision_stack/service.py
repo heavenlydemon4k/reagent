@@ -39,7 +39,7 @@ class DecisionStackService:
     async def receive_critical_email(self, user_id: str, email: EmailContext) -> DecisionCard:
         """Called by NATS consumer when Classification emits a critical email."""
         thread = self.kb.thread_context(email.email_id)
-        card = self._generate_card(user_id, email, thread)
+        card = await self._generate_card(user_id, email, thread)
         async with db_session() as db:
             from datetime import datetime
             db_card = CardModel(
@@ -59,7 +59,7 @@ class DecisionStackService:
             db.add(db_card)
         return card
 
-    def _generate_card(self, user_id: str, email: EmailContext, thread: List[EmailContext]) -> DecisionCard:
+    async def _generate_card(self, user_id: str, email: EmailContext, thread: List[EmailContext]) -> DecisionCard:
         context = self.kb.summarize_for_agent(thread)
         prompt = f"""You are an email decision assistant. The user received this email and needs to decide what to do.
 
@@ -81,7 +81,7 @@ Generate a JSON decision card with this exact shape:
 
 Only return valid JSON. No markdown, no explanation."""
 
-        response = self.llm.route(prompt, complexity="complex")
+        response = await self.llm.route(prompt, complexity="complex")
         try:
             parsed = json.loads(response.text)
         except json.JSONDecodeError:
@@ -226,10 +226,12 @@ Only return valid JSON. No markdown, no explanation."""
                 resp = await client.post(
                     f"{ingestion_url}/api/v1/send",
                     json={
-                        "to": decision.draft_text.split("\n")[0] if decision.draft_text else "",
-                        "subject": "Re: " + (decision.draft_text[:50] if decision.draft_text else ""),
-                        "body": decision.draft_text,
-                        "draft_id": str(decision.id),
+                        "user_id": decision.user_id,
+                        "to": decision.to_address or "",
+                        "subject": decision.subject or "",
+                        "body": decision.draft_text or "",
+                        "thread_id": decision.thread_id,
+                        "account_id": decision.account_id,
                     },
                 )
                 resp.raise_for_status()

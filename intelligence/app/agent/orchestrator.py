@@ -83,7 +83,7 @@ class AgentOrchestrator:
             "Answer directly. Reference emails by ID. Include [Source: email_id] after each claim.",
         ]
         prompt = "\n".join(lines)
-        response = self.llm.route(prompt, complexity="complex")
+        response = await self.llm.route(prompt, complexity="complex")
         text = response.text.strip()
         source_ids = self._extract_source_ids(text)
         return self._agent_response(session_id, text, session_manager, source_email_ids=source_ids, cost=response.meter.total_cost_usd)
@@ -97,7 +97,7 @@ class AgentOrchestrator:
             await self.stack.resolve_card(active_card.id, action)
             sender = active_card.source_email.get("from", "unknown")
             return self._agent_response(session_id, "Done. I have " + action + "ed the email from " + sender + ".", session_manager, card_resolved={"card_id": active_card.id, "action": action})
-        draft = self.drafting.draft_reply(user_id=user_id, email_id=active_card.email_id, decision_action=action, user_instruction=content if len(content) > 10 else None)
+        draft = await self.drafting.draft_reply(user_id=user_id, email_id=active_card.email_id, decision_action=action, user_instruction=content if len(content) > 10 else None)
         preview_payload = {
             "type": "card", "card_type": "confirm", "title": "Draft: " + active_card.title,
             "body": draft["draft_text"], "source_email_id": active_card.email_id,
@@ -153,26 +153,24 @@ class AgentOrchestrator:
             "Agent:",
         ]
         prompt = "\n".join(lines)
-        response = self.llm.route(prompt, complexity="auto")
+        response = await self.llm.route(prompt, complexity="auto")
         return self._agent_response(session_id, response.text.strip(), session_manager, cost=response.meter.total_cost_usd)
 
     async def _handle_send_approval(self, user_id, session_id, card_id, session_manager):
-        from intelligence.app.decision_stack.service import DecisionStackService
-        stack = DecisionStackService(kb=self.kb)
-        result = await stack.send_and_resolve(card_id, user_id)
+        result = await self.stack.send_and_resolve(card_id, user_id)
         if result.get("error"):
             return self._agent_response(session_id, "Send failed: " + result["error"], session_manager)
-        card = await stack.activate_next(user_id, session_id)
+        card = await self.stack.activate_next(user_id, session_id)
         if not card:
             return self._agent_response(session_id, "Sent. Stack complete - no more critical emails.", session_manager, stack_complete=True)
-        payload = stack.to_message_payload(card)
+        payload = self.stack.to_message_payload(card)
         return self._agent_response(session_id, "Sent. Next card:", session_manager, card_payload=payload)
 
     async def _handle_edit_request(self, user_id, session_id, card_id, payload, session_manager):
         edit_text = (payload or {}).get("edit_text", "")
         if not edit_text:
             return self._agent_response(session_id, "No edit text provided.", session_manager)
-        draft = self.drafting.edit_draft(card_id, edit_text)
+        draft = await self.drafting.edit_draft(card_id, edit_text)
         preview_payload = {
             "type": "card", "card_type": "confirm", "title": "Edited Draft",
             "body": draft["draft_text"],
@@ -186,13 +184,11 @@ class AgentOrchestrator:
         return self._agent_response(session_id, "Updated draft:", session_manager, card_payload=preview_payload)
 
     async def _handle_discard(self, user_id, session_id, card_id, session_manager):
-        from intelligence.app.decision_stack.service import DecisionStackService
-        stack = DecisionStackService(kb=self.kb)
-        card = await stack.get_card_by_id(card_id)
+        card = await self.stack.get_card_by_id(card_id)
         if not card:
             return self._agent_response(session_id, "Card not found.", session_manager)
         card.status = "active"
-        payload = stack.to_message_payload(card)
+        payload = self.stack.to_message_payload(card)
         return self._agent_response(session_id, "Draft discarded. Here is the card again:", session_manager, card_payload=payload)
 
     def _agent_response(self, session_id, text, session_manager, source_email_ids=None, card_payload=None, card_resolved=None, stack_complete=False, cost=None):

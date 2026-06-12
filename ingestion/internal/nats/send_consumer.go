@@ -31,6 +31,14 @@ type SendJobPayload struct {
 	Subject    string    `json:"subject"`
 	InReplyTo  *string   `json:"in_reply_to,omitempty"`
 	References []string  `json:"references,omitempty"`
+	// To is the explicit recipient address resolved by Intelligence at
+	// card-generation time. When present it is authoritative and bypasses
+	// thread-based recipient resolution. Empty for legacy Sync-approval payloads.
+	To string `json:"to,omitempty"`
+	// AccountID is the explicit sending account (email_accounts.id) resolved by
+	// Intelligence. When present it bypasses the draft→decision_card join and the
+	// first-active-account fallback. Empty for legacy payloads.
+	AccountID string `json:"account_id,omitempty"`
 }
 
 // EmailSentEvent is published to "email.sent" after a draft is successfully
@@ -142,18 +150,40 @@ func (c *SendConsumer) HandleSendMessage(ctx context.Context, msg *natsgo.Msg) e
 
 // trySend performs a single end-to-end send attempt.
 func (c *SendConsumer) trySend(ctx context.Context, log *logger.Logger, payload SendJobPayload) error {
-	// 2. Resolve source account via draft → decision_card → email_accounts
+	// 2. Resolve source account.
+	//    Preference order:
+	//      a. explicit AccountID from the payload (Intelligence resolved it at
+	//         card-generation time) — authoritative
+	//      b. draft → decision_card → email_accounts join
+	//      c. user's first active email account
 	var accountID uuid.UUID
 	var providerName string
 	var accountEmail string
 
-	err := c.db.QueryRowContext(ctx, `
-		SELECT ea.id, ea.provider, ea.email_address
-		FROM drafts d
-		JOIN decision_cards c ON d.card_id = c.id
-		JOIN email_accounts ea ON c.source_account_id = ea.id
-		WHERE d.id = $1 AND d.user_id = $2 AND ea.is_active = true
-	`, payload.DraftID, payload.UserID).Scan(&accountID, &providerName, &accountEmail)
+	// a. Explicit account from the payload.
+	err := sql.ErrNoRows
+	if payload.AccountID != "" {
+		if parsedAccountID, perr := uuid.Parse(payload.AccountID); perr == nil {
+			err = c.db.QueryRowContext(ctx, `
+				SELECT id, provider, email_address
+				FROM email_accounts
+				WHERE id = $1 AND user_id = $2 AND is_active = true
+			`, parsedAccountID, payload.UserID).Scan(&accountID, &providerName, &accountEmail)
+		} else {
+			log.Warn(ctx, "payload account_id is not a valid UUID, falling back", "account_id", payload.AccountID)
+		}
+	}
+
+	// b. draft → decision_card → email_accounts join.
+	if err == sql.ErrNoRows {
+		err = c.db.QueryRowContext(ctx, `
+			SELECT ea.id, ea.provider, ea.email_address
+			FROM drafts d
+			JOIN decision_cards c ON d.card_id = c.id
+			JOIN email_accounts ea ON c.source_account_id = ea.id
+			WHERE d.id = $1 AND d.user_id = $2 AND ea.is_active = true
+		`, payload.DraftID, payload.UserID).Scan(&accountID, &providerName, &accountEmail)
+	}
 	if err == sql.ErrNoRows {
 		// Fallback: use the user's first active email account
 		err = c.db.QueryRowContext(ctx, `
@@ -175,11 +205,16 @@ func (c *SendConsumer) trySend(ctx context.Context, log *logger.Logger, payload 
 
 	log = log.With("account_id", accountID, "provider", providerName)
 
-	// 3. Resolve recipient (reply-to address)
-	recipient, err := c.resolveRecipient(ctx, payload)
-	if err != nil {
-		log.Warn(ctx, "recipient resolution failed", "error", err)
-		// Continue with empty To — provider will fail gracefully
+	// 3. Resolve recipient. An explicit To from the payload is authoritative;
+	//    only fall back to thread-based resolution when it is absent.
+	recipient := strings.TrimSpace(payload.To)
+	if recipient == "" {
+		var rerr error
+		recipient, rerr = c.resolveRecipient(ctx, payload)
+		if rerr != nil {
+			log.Warn(ctx, "recipient resolution failed", "error", rerr)
+			// Continue with empty To — provider will fail gracefully
+		}
 	}
 
 	// 4. Refresh tokens if needed (handles decrypt, refresh, encrypt, persist)

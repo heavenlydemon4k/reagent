@@ -189,25 +189,25 @@ func onnxClassToDatum(class string, confidence float64) *models.ExtractedDatum {
 	case classReceipt:
 		return &models.ExtractedDatum{
 			Type:             string(TypeReceipt),
-			Value:            fmt.Sprintf("receipt_conf_%.4f", confidence),
+			Value:            fmt.Sprintf("%s_conf_%.4f", class, confidence),
 			NotificationText: NotificationTemplates[TypeReceipt],
 		}
 	case classNewsletter:
 		return &models.ExtractedDatum{
 			Type:             string(TypeNewsletter),
-			Value:            fmt.Sprintf("newsletter_conf_%.4f", confidence),
+			Value:            fmt.Sprintf("%s_conf_%.4f", class, confidence),
 			NotificationText: NotificationTemplates[TypeNewsletter],
 		}
 	case classNotification:
 		return &models.ExtractedDatum{
 			Type:             string(TypeNotification),
-			Value:            fmt.Sprintf("notification_conf_%.4f", confidence),
+			Value:            fmt.Sprintf("%s_conf_%.4f", class, confidence),
 			NotificationText: NotificationTemplates[TypeNotification],
 		}
 	default:
 		return &models.ExtractedDatum{
 			Type:             string(TypeNotification),
-			Value:            fmt.Sprintf("unknown_conf_%.4f", confidence),
+			Value:            fmt.Sprintf("%s_conf_%.4f", class, confidence),
 			NotificationText: NotificationTemplates[TypeNotification],
 		}
 	}
